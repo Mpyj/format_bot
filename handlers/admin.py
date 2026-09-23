@@ -23,13 +23,16 @@ def is_admin(user_id: int) -> bool:
 
 
 # ---------- پنل ادمین ----------
-def admin_panel(message, edit: bool = False):
+def admin_panel(message, edit: bool = False, user_id: int = None):
     """
     پنل ادمین.
-    - edit=True: پیام فعلی رو ویرایش می‌کنه (برای بازگشت)
-    - edit=False: پیام جدید می‌فرسته (برای اولین بار)
+    - edit=True: پیام فعلی رو ویرایش می‌کنه
+    - user_id: اگه داده بشه، به جای message.from_user چک می‌کنه
+              (چون توی callback، message.from_user = bot هست)
     """
-    if not is_admin(message.from_user.id):
+    check_id = user_id if user_id is not None else message.from_user.id
+
+    if not is_admin(check_id):
         return
 
     text = (
@@ -81,6 +84,7 @@ def admin_callback(call):
 
     action = call.data.replace("adm_", "")
 
+    # ❌ بستن
     if action == "close":
         bot.answer_callback_query(call.id, "بسته شد")
         try:
@@ -89,18 +93,22 @@ def admin_callback(call):
             pass
         return
 
+    # 🔙 بازگشت
     if action == "back":
+        logger.info(f"🔙 back pressed by {call.from_user.id}")
         bot.answer_callback_query(call.id)
-        # 👇 ویرایش پیام فعلی به جای پاک کردن + فرستادن جدید
-        admin_panel(call.message, edit=True)
+        admin_panel(call.message, edit=True, user_id=call.from_user.id)
         return
 
+    # 📊 آمار
     if action == "stats":
         _show_stats(call)
     elif action == "top":
         _show_top(call)
     elif action == "ops":
         _show_ops(call)
+
+    # 👤 جستجوی کاربر
     elif action == "find_user":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_find_user")
@@ -113,6 +121,8 @@ def admin_callback(call):
             "• <code>@username</code>\n"
             "• <code>username</code>"
         )
+
+    # 📢 پیام همگانی
     elif action == "broadcast":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_broadcast")
@@ -122,6 +132,8 @@ def admin_callback(call):
             "متن پیام رو بفرست تا به همه کاربرا ارسال بشه.\n\n"
             "⚠️ این کار ممکنه چند دقیقه طول بکشه."
         )
+
+    # 🚫 بن/آنبن
     elif action == "ban":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_ban_user")
@@ -133,6 +145,8 @@ def admin_callback(call):
             "• <code>7144847927</code>\n"
             "• <code>@username</code>"
         )
+
+    # 📥 CSV
     elif action == "csv_users":
         _export_csv(call, "users")
     elif action == "csv_ops":
@@ -271,7 +285,8 @@ def _export_csv(call, kind: str):
         logger.exception("خطا در CSV")
         bot.send_message(call.message.chat.id, f"❌ خطا: {e}")
 
-    admin_panel(call.message, edit=True)
+    # 👇 user_id رو پاس بده
+    admin_panel(call.message, edit=True, user_id=call.from_user.id)
 
 
 # ---------- جستجوی کاربر ----------
@@ -458,6 +473,7 @@ def admin_do_ban(call):
 
 # ---------- تابع کمکی ----------
 def _find_user_by_query(query: str) -> dict | None:
+    """اگه query عدد بود، با ID. اگه @ داشت یا حروف بود، با یوزرنیم."""
     query = query.strip()
 
     if query.startswith("@"):
