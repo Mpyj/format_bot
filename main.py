@@ -22,9 +22,11 @@ bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ۱) ساخت پوشه temp
     ensure_temp_dir()
     cleanup_old_files()
 
+    # ۲) ساخت جدول‌های دیتابیس
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -32,8 +34,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ خطا در اتصال دیتابیس: {e}")
 
-    from handlers import start, image, ocr, archive, site, middleware  # noqa
+    # ۳) ایمپورت هندلرها
+    from handlers import (  # noqa
+        start, image, ocr, archive, site, media, pdf,
+        creativity, admin, middleware
+    )
 
+    # ۴) ست کردن وبهوک
     domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
     if domain and BOT_TOKEN:
         webhook_url = f"https://{domain}/{BOT_TOKEN}"
@@ -41,7 +48,7 @@ async def lifespan(app: FastAPI):
         bot.set_webhook(url=webhook_url)
         logger.info(f"✅ وبهوک ست شد: {webhook_url}")
     else:
-        logger.warning("⚠️ دامنه یا توکن موجود نیست")
+        logger.warning("⚠️ دامنه یا توکن موجود نیست (لوکال؟)")
 
     yield
 

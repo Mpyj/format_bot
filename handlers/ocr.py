@@ -15,8 +15,16 @@ from handlers.middleware import check_usage_limit, mark_user_used
 
 logger = logging.getLogger(__name__)
 
-TESSERACT_PATH = r"C:\PROGRA~1\Tesseract-OCR\tesseract.exe"
-TESSDATA_PATH = r"C:\PROGRA~1\Tesseract-OCR\tessdata"
+# ⚠️ مسیر Tesseract و tessdata
+# روی لوکال (ویندوز): C:\PROGRA~1\Tesseract-OCR
+# روی Railway (لینوکس): /usr/bin/tesseract و /app/tessdata
+TESSERACT_PATH = "/usr/bin/tesseract"
+TESSDATA_PATH = "/app/tessdata"
+
+# اگه روی ویندوزیم، مسیر ویندوزی رو استفاده کن
+if os.name == "nt":
+    TESSERACT_PATH = r"C:\PROGRA~1\Tesseract-OCR\tesseract.exe"
+    TESSDATA_PATH = r"C:\PROGRA~1\Tesseract-OCR\tessdata"
 
 if os.path.exists(TESSERACT_PATH):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
@@ -123,9 +131,13 @@ def ocr_receive_photo(message):
             reply_markup=main_menu_keyboard()
         )
 
-    except pytesseract.TesseractError:
+    except pytesseract.TesseractError as e:
         logger.exception("خطای Tesseract")
-        bot.send_message(message.chat.id, "❌ خطا در تشخیص متن.")
+        bot.send_message(
+            message.chat.id,
+            "❌ خطا در تشخیص متن.\n"
+            "ممکنه فایل‌های زبان نصب نباشن."
+        )
     except Exception as e:
         logger.exception("خطا در OCR")
         bot.send_message(message.chat.id, f"❌ خطا: {e}")
@@ -138,6 +150,7 @@ def ocr_receive_photo(message):
 
 
 def _preprocess_image(path: str) -> str:
+    """پیش‌پردازش عکس برای OCR بهتر"""
     img = Image.open(path)
     if img.mode != "L":
         img = img.convert("L")
