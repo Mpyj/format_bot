@@ -1,6 +1,7 @@
 [phases.setup]
 nixPkgs = [
     "python312",
+    "pip",
     "ffmpeg",
     "tesseract",
     "poppler_utils",
@@ -8,7 +9,7 @@ nixPkgs = [
 
 [phases.install]
 cmds = [
-    "pip install -r requirements.txt",
+    "python3.12 -m pip install -r requirements.txt",
     "mkdir -p /app/tessdata",
     "curl -L https://github.com/tesseract-ocr/tessdata/raw/main/fas.traineddata -o /app/tessdata/fas.traineddata",
     "curl -L https://github.com/tesseract-ocr/tessdata/raw/main/eng.traineddata -o /app/tessdata/eng.traineddata",
