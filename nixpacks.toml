@@ -1,7 +1,6 @@
 [phases.setup]
 nixPkgs = [
     "python312",
-    "pip",
     "ffmpeg",
     "tesseract",
     "poppler_utils",
