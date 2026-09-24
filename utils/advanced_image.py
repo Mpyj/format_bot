@@ -181,25 +181,38 @@ def auto_rotate(input_path: str) -> str | None:
 # 🔍 بزرگ‌نمایی
 # ============================================================
 def zoom_image(input_path: str, factor: int = 2) -> str | None:
-    """بزرگ‌نمایی عکس با LANCZOS"""
+    """
+    بزرگ‌نمایی عکس با LANCZOS.
+    محدودیت: حداکثر 6000×6000 پیکسل.
+    """
     try:
         img = Image.open(input_path)
         w, h = img.size
         new_w, new_h = w * factor, h * factor
 
-        # محدودیت اندازه
-        if new_w > 8000 or new_h > 8000:
+        # محدودیت اندازه (تلگرام فایل‌های بزرگ رو دوست نداره)
+        if new_w > 6000 or new_h > 6000:
+            logger.warning(f"عکس خیلی بزرگ میشه: {new_w}×{new_h}")
             return None
 
+        # کیفیت بالا با LANCZOS
         zoomed = img.resize((new_w, new_h), Image.LANCZOS)
 
         ext = os.path.splitext(input_path)[1] or ".jpg"
         output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_zoom{ext}")
 
-        if zoomed.mode in ("RGBA", "LA", "P") and ext.lower() in (".jpg", ".jpeg"):
-            zoomed = zoomed.convert("RGB")
+        # تبدیل mode اگه لازمه
+        if ext.lower() in (".jpg", ".jpeg"):
+            if zoomed.mode in ("RGBA", "LA", "P"):
+                zoomed = zoomed.convert("RGB")
+            zoomed.save(output, "JPEG", quality=95)
+        elif ext.lower() == ".png":
+            zoomed.save(output, "PNG")
+        elif ext.lower() == ".webp":
+            zoomed.save(output, "WEBP", quality=95)
+        else:
+            zoomed.save(output)
 
-        zoomed.save(output)
         return output
     except Exception as e:
         logger.exception(f"خطا در بزرگ‌نمایی: {e}")

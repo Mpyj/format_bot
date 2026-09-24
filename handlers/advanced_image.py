@@ -481,25 +481,58 @@ def zoom_chosen(call):
         return
 
     bot.answer_callback_query(call.id, f"({factor}x)")
+
+    # ابعاد اصلی
+    dims_before = get_image_dimensions(path)
+    if not dims_before.get("success"):
+        bot.send_message(call.message.chat.id, "❌ خطا در خوندن عکس.")
+        delete_file(path)
+        clear_state(user_id)
+        return
+
+    w_before = dims_before["width"]
+    h_before = dims_before["height"]
+
     bot.edit_message_text(
-        f"⏳ در حال بزرگ‌نمایی ({factor}x)...",
+        f"⏳ در حال بزرگ‌نمایی ({factor}x)...\n\n"
+        f"📐 ابعاد اصلی: {w_before} × {h_before}",
         call.message.chat.id, call.message.message_id
     )
 
     output = zoom_image(path, factor)
 
     if output and os.path.exists(output):
+        # ابعاد جدید
+        dims_after = get_image_dimensions(output)
+        w_after = dims_after.get("width", "?")
+        h_after = dims_after.get("height", "?")
         size = os.path.getsize(output)
+        size_kb = size / 1024
+
+        caption = (
+            f"🔍 <b>بزرگ‌نمایی {factor}x</b>\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"📐 <b>قبل:</b> {w_before} × {h_before}\n"
+            f"📐 <b>بعد:</b> {w_after} × {h_after}\n"
+            f"📊 <b>حجم:</b> {size_kb:.1f} KB\n\n"
+            f"💡 <i>عکس بزرگ‌تره، ولی تلگرام همون اندازه نشون میده.\n"
+            f"برای دیدن تفاوت، فایل رو دانلود کن.</i>"
+        )
+
         with open(output, "rb") as f:
             bot.send_document(
                 call.message.chat.id, f,
-                caption=f"🔍 <b>بزرگ‌نمایی {factor}x</b>\n📊 {human_size(size)}",
+                caption=caption,
                 parse_mode='HTML'
             )
         delete_file(output)
         mark_user_used(user_id)
     else:
-        bot.send_message(call.message.chat.id, "❌ ناموفق بود.")
+        bot.send_message(
+            call.message.chat.id,
+            "❌ ناموفق بود.\n\n"
+            "💡 ممکنه عکس خیلی بزرگ بشه و از حد مجاز رد بشه."
+        )
 
     delete_file(path)
     clear_state(user_id)
