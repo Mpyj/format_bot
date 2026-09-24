@@ -11,8 +11,9 @@ from utils.file_info import human_size
 from utils.media_tools import get_media_info
 from utils.advanced_media import (
     extract_frame, auto_thumbnail, add_subtitle,
-    add_music, images_to_video, remove_vocals,
+    add_music, images_to_video,
     audio_waveform, timelapse, concat_videos, remove_audio,
+    amplify_audio, add_reverb, change_audio_speed,
 )
 from utils.keyboards import main_menu_keyboard
 from handlers.middleware import mark_user_used
@@ -42,10 +43,17 @@ def _adv_media_menu(user_id: int = None):
     )
     markup.add(
         types.InlineKeyboardButton("🎬 عکس → ویدیو", callback_data="adv_media_slideshow"),
-        types.InlineKeyboardButton("🔊 حذف صدا خواننده", callback_data="adv_media_karaoke"),
     )
     markup.add(
         types.InlineKeyboardButton("📊 نمودار موج صدا", callback_data="adv_media_waveform"),
+    )
+    # 🆕 سه قابلیت جدید
+    markup.add(
+        types.InlineKeyboardButton("🔊 افزایش صدا", callback_data="adv_media_amplify"),
+        types.InlineKeyboardButton("🎵 افزودن Reverb", callback_data="adv_media_reverb"),
+    )
+    markup.add(
+        types.InlineKeyboardButton("🎚 تغییر سرعت صدا", callback_data="adv_media_audiospeed"),
     )
     markup.add(types.InlineKeyboardButton("❌ بستن", callback_data="adv_media_close"))
     return markup
@@ -77,8 +85,10 @@ def adv_media_start(message):
         "📝 <b>زیرنویس</b> — SRT روی ویدیو\n"
         "🎵 <b>افزودن موسیقی</b> — موسیقی روی ویدیو\n"
         "🎬 <b>عکس → ویدیو</b> — اسلایدشو\n"
-        "🔊 <b>حذف صدا خواننده</b> — کارائوکه\n"
-        "📊 <b>نمودار موج صدا</b> — waveform",
+        "📊 <b>نمودار موج صدا</b>\n"
+        "🔊 <b>افزایش صدا</b> — صدای بلندتر\n"
+        "🎵 <b>افزودن Reverb</b> — افکت echo\n"
+        "🎚 <b>تغییر سرعت صدا</b>",
         parse_mode='HTML',
         reply_markup=_adv_media_menu(user_id)
     )
@@ -92,7 +102,6 @@ def adv_media_action(call):
     user_id = call.from_user.id
     action = call.data.replace("adv_media_", "")
 
-    # 🔙 back
     if action == "back":
         bot.answer_callback_query(call.id)
         clear_state(user_id)
@@ -111,7 +120,6 @@ def adv_media_action(call):
             )
         return
 
-    # ❌ close
     if action == "close":
         clear_state(user_id)
         bot.answer_callback_query(call.id, "بسته شد")
@@ -128,7 +136,7 @@ def adv_media_action(call):
 
     bot.answer_callback_query(call.id)
 
-    # 🎬 اسلایدشو حالت خاص داره
+    # 🎬 اسلایدشو
     if action == "slideshow":
         set_state(user_id, mode="adv_media", adv_action="slideshow",
                   waiting_for="adv_slideshow_more", adv_slideshow_files=[])
@@ -157,6 +165,73 @@ def adv_media_action(call):
             )
         return
 
+    # 🔊 افزایش صدا
+    if action == "amplify":
+        set_state(user_id, mode="adv_media", adv_action="amplify", waiting_for="adv_amplify")
+        markup = types.InlineKeyboardMarkup(row_width=3)
+        markup.add(
+            types.InlineKeyboardButton("1.5x", callback_data="amp_1.5"),
+            types.InlineKeyboardButton("2x", callback_data="amp_2.0"),
+            types.InlineKeyboardButton("3x", callback_data="amp_3.0"),
+        )
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adv_media_back"))
+        try:
+            bot.edit_message_text(
+                "🔊 <b>افزایش صدا</b>\n\n"
+                "ضریب افزایش رو انتخاب کن:\n\n"
+                "⚠️ اگه صدا خیلی بلند بشه، ممکنه اعوجاج داشته باشه.",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=markup
+            )
+        except Exception:
+            bot.send_message(call.message.chat.id, "🔊 <b>افزایش صدا</b>", parse_mode='HTML', reply_markup=markup)
+        return
+
+    # 🎵 Reverb
+    if action == "reverb":
+        set_state(user_id, mode="adv_media", adv_action="reverb", waiting_for="adv_reverb")
+        markup = types.InlineKeyboardMarkup(row_width=3)
+        markup.add(
+            types.InlineKeyboardButton("🔸 کوچیک", callback_data="rev_small"),
+            types.InlineKeyboardButton("🔶 متوسط", callback_data="rev_medium"),
+            types.InlineKeyboardButton("🔷 بزرگ", callback_data="rev_large"),
+        )
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adv_media_back"))
+        try:
+            bot.edit_message_text(
+                "🎵 <b>افزودن Reverb</b>\n\n"
+                "شدت افکت رو انتخاب کن:",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=markup
+            )
+        except Exception:
+            bot.send_message(call.message.chat.id, "🎵 <b>افزودن Reverb</b>", parse_mode='HTML', reply_markup=markup)
+        return
+
+    # 🎚 تغییر سرعت صدا
+    if action == "audiospeed":
+        set_state(user_id, mode="adv_media", adv_action="audiospeed", waiting_for="adv_audiospeed")
+        markup = types.InlineKeyboardMarkup(row_width=3)
+        markup.add(
+            types.InlineKeyboardButton("0.5x", callback_data="aspd_0.5"),
+            types.InlineKeyboardButton("0.75x", callback_data="aspd_0.75"),
+            types.InlineKeyboardButton("1.5x", callback_data="aspd_1.5"),
+            types.InlineKeyboardButton("2x", callback_data="aspd_2.0"),
+            types.InlineKeyboardButton("3x", callback_data="aspd_3.0"),
+        )
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adv_media_back"))
+        try:
+            bot.edit_message_text(
+                "🎚 <b>تغییر سرعت صدا</b>\n\n"
+                "سرعت رو انتخاب کن (پیچ تغییر نمی‌کنه):",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=markup
+            )
+        except Exception:
+            bot.send_message(call.message.chat.id, "🎚 <b>تغییر سرعت صدا</b>", parse_mode='HTML', reply_markup=markup)
+        return
+
+    # hints عادی
     hints = {
         "frame": "📸 <b>استخراج فریم</b>\n\nویدیو رو بفرست تا از ثانیه دلخواه عکس بگیرم.",
         "thumb": "🖼️ <b>Thumbnail</b>\n\nویدیو رو بفرست تا بهترین فریم رو انتخاب کنم.",
@@ -165,8 +240,6 @@ def adv_media_action(call):
         "concat": "🎞 <b>ترکیب ۲ ویدیو</b>\n\nویدیو <b>اول</b> رو بفرست.",
         "subtitle": "📝 <b>افزودن زیرنویس</b>\n\nویدیو رو بفرست، بعد فایل SRT.",
         "music": "🎵 <b>افزودن موسیقی</b>\n\nویدیو رو بفرست، بعد فایل صوتی.",
-        "karaoke": "🔊 <b>حذف صدا خواننده</b>\n\nفایل صوتی (استریو) رو بفرست.\n\n"
-                   "⚠️ این روش ساده‌ست و کامل نیست.",
         "waveform": "📊 <b>نمودار موج صدا</b>\n\nفایل صوتی رو بفرست.",
     }
 
@@ -199,6 +272,9 @@ def adv_media_action(call):
             "adv_slideshow_more",
             "adv_frame_time",
             "adv_timelapse_speed",
+            "adv_amplify",
+            "adv_reverb",
+            "adv_audiospeed",
         )
 )
 def adv_receive_media(message):
@@ -233,11 +309,8 @@ def adv_receive_media(message):
             set_state(user_id, waiting_for="adv_frame_time")
             bot.send_message(
                 message.chat.id,
-                "✅ ویدیو دریافت شد.\n\n"
-                "⏱ زمان رو بفرست:\n"
-                "• <code>00:05</code>\n"
-                "• <code>01:30</code>\n"
-                "• <code>00:00:10</code>",
+                "✅ ویدیو دریافت شد.\n\n⏱ زمان رو بفرست:\n"
+                "• <code>00:05</code>\n• <code>01:30</code>\n• <code>00:00:10</code>",
                 parse_mode='HTML'
             )
         elif action == "thumb":
@@ -258,8 +331,7 @@ def adv_receive_media(message):
             set_state(user_id, waiting_for="adv_concat_second")
             bot.send_message(
                 message.chat.id,
-                "✅ ویدیو اول دریافت شد.\n\n"
-                "الان ویدیو <b>دوم</b> رو بفرست:",
+                "✅ ویدیو اول دریافت شد.\n\nالان ویدیو <b>دوم</b> رو بفرست:",
                 parse_mode='HTML'
             )
         elif action == "subtitle":
@@ -268,10 +340,37 @@ def adv_receive_media(message):
         elif action == "music":
             set_state(user_id, waiting_for="adv_music_audio")
             bot.send_message(message.chat.id, "✅ ویدیو دریافت شد.\n\nالان موسیقی رو بفرست:")
-        elif action == "karaoke":
-            _process_karaoke(message, user_id, path)
         elif action == "waveform":
             _process_waveform(message, user_id, path)
+        elif action in ("amplify", "reverb", "audiospeed"):
+            # اینا با دکمه انتخاب میشن
+            set_state(user_id, adv_input_path=path)
+            if action == "amplify":
+                markup = types.InlineKeyboardMarkup(row_width=3)
+                markup.add(
+                    types.InlineKeyboardButton("1.5x", callback_data="amp_1.5"),
+                    types.InlineKeyboardButton("2x", callback_data="amp_2.0"),
+                    types.InlineKeyboardButton("3x", callback_data="amp_3.0"),
+                )
+                bot.send_message(message.chat.id, "🔊 ضریب افزایش صدا:", reply_markup=markup)
+            elif action == "reverb":
+                markup = types.InlineKeyboardMarkup(row_width=3)
+                markup.add(
+                    types.InlineKeyboardButton("🔸 کوچیک", callback_data="rev_small"),
+                    types.InlineKeyboardButton("🔶 متوسط", callback_data="rev_medium"),
+                    types.InlineKeyboardButton("🔷 بزرگ", callback_data="rev_large"),
+                )
+                bot.send_message(message.chat.id, "🎵 شدت Reverb:", reply_markup=markup)
+            elif action == "audiospeed":
+                markup = types.InlineKeyboardMarkup(row_width=3)
+                markup.add(
+                    types.InlineKeyboardButton("0.5x", callback_data="aspd_0.5"),
+                    types.InlineKeyboardButton("0.75x", callback_data="aspd_0.75"),
+                    types.InlineKeyboardButton("1.5x", callback_data="aspd_1.5"),
+                    types.InlineKeyboardButton("2x", callback_data="aspd_2.0"),
+                    types.InlineKeyboardButton("3x", callback_data="aspd_3.0"),
+                )
+                bot.send_message(message.chat.id, "🎚 سرعت صدا:", reply_markup=markup)
         else:
             bot.send_message(message.chat.id, "❌ عملیات نامشخص")
             delete_file(path)
@@ -283,6 +382,148 @@ def adv_receive_media(message):
         if path:
             delete_file(path)
         clear_state(user_id)
+
+
+# ============================================================
+# 🔊 افزایش صدا — انتخاب ضریب
+# ============================================================
+@bot.callback_query_handler(func=lambda c: c.data.startswith("amp_"))
+def amplify_chosen(call):
+    user_id = call.from_user.id
+    state = get_state(user_id)
+    path = state.get("adv_input_path")
+    factor = float(call.data.replace("amp_", ""))
+
+    if not path or not os.path.exists(path):
+        bot.answer_callback_query(call.id, "فایل پیدا نشد", show_alert=True)
+        clear_state(user_id)
+        return
+
+    bot.answer_callback_query(call.id, f"({factor}x)")
+    bot.edit_message_text(
+        f"⏳ در حال افزایش صدا ({factor}x)...",
+        call.message.chat.id, call.message.message_id
+    )
+
+    output = amplify_audio(path, factor)
+
+    if output and os.path.exists(output):
+        size = os.path.getsize(output)
+        ext = os.path.splitext(output)[1].lstrip(".").lower()
+        with open(output, "rb") as f:
+            if ext in ("mp3", "wav", "ogg", "m4a"):
+                bot.send_audio(
+                    call.message.chat.id, f,
+                    caption=f"🔊 <b>صدا {factor}x بلندتر شد</b>\n📊 {human_size(size)}",
+                    parse_mode='HTML'
+                )
+            else:
+                bot.send_video(
+                    call.message.chat.id, f,
+                    caption=f"🔊 <b>صدا {factor}x بلندتر شد</b>\n📊 {human_size(size)}",
+                    parse_mode='HTML',
+                    supports_streaming=True,
+                )
+        delete_file(output)
+        mark_user_used(user_id)
+    else:
+        bot.send_message(call.message.chat.id, "❌ ناموفق بود.")
+
+    delete_file(path)
+    clear_state(user_id)
+    bot.send_message(call.message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
+
+
+# ============================================================
+# 🎵 Reverb — انتخاب شدت
+# ============================================================
+@bot.callback_query_handler(func=lambda c: c.data.startswith("rev_"))
+def reverb_chosen(call):
+    user_id = call.from_user.id
+    state = get_state(user_id)
+    path = state.get("adv_input_path")
+    level = call.data.replace("rev_", "")
+
+    if not path or not os.path.exists(path):
+        bot.answer_callback_query(call.id, "فایل پیدا نشد", show_alert=True)
+        clear_state(user_id)
+        return
+
+    level_names = {"small": "کوچیک", "medium": "متوسط", "large": "بزرگ"}
+    bot.answer_callback_query(call.id, f"({level_names.get(level, level)})")
+    bot.edit_message_text(
+        f"⏳ در حال افزودن Reverb ({level_names.get(level, level)})...",
+        call.message.chat.id, call.message.message_id
+    )
+
+    output = add_reverb(path, level)
+
+    if output and os.path.exists(output):
+        size = os.path.getsize(output)
+        ext = os.path.splitext(output)[1].lstrip(".").lower()
+        with open(output, "rb") as f:
+            if ext in ("mp3", "wav", "ogg", "m4a"):
+                bot.send_audio(
+                    call.message.chat.id, f,
+                    caption=f"🎵 <b>Reverb {level_names.get(level, level)}</b>\n📊 {human_size(size)}",
+                    parse_mode='HTML'
+                )
+            else:
+                bot.send_video(
+                    call.message.chat.id, f,
+                    caption=f"🎵 <b>Reverb {level_names.get(level, level)}</b>\n📊 {human_size(size)}",
+                    parse_mode='HTML',
+                    supports_streaming=True,
+                )
+        delete_file(output)
+        mark_user_used(user_id)
+    else:
+        bot.send_message(call.message.chat.id, "❌ ناموفق بود.")
+
+    delete_file(path)
+    clear_state(user_id)
+    bot.send_message(call.message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
+
+
+# ============================================================
+# 🎚 تغییر سرعت صدا
+# ============================================================
+@bot.callback_query_handler(func=lambda c: c.data.startswith("aspd_"))
+def audiospeed_chosen(call):
+    user_id = call.from_user.id
+    state = get_state(user_id)
+    path = state.get("adv_input_path")
+    speed = float(call.data.replace("aspd_", ""))
+
+    if not path or not os.path.exists(path):
+        bot.answer_callback_query(call.id, "فایل پیدا نشد", show_alert=True)
+        clear_state(user_id)
+        return
+
+    bot.answer_callback_query(call.id, f"({speed}x)")
+    bot.edit_message_text(
+        f"⏳ در حال تغییر سرعت ({speed}x)...",
+        call.message.chat.id, call.message.message_id
+    )
+
+    output = change_audio_speed(path, speed)
+
+    if output and os.path.exists(output):
+        size = os.path.getsize(output)
+        with open(output, "rb") as f:
+            bot.send_audio(
+                call.message.chat.id, f,
+                caption=f"🎚 <b>سرعت {speed}x شد</b>\n📊 {human_size(size)}",
+                parse_mode='HTML'
+            )
+        delete_file(output)
+        mark_user_used(user_id)
+    else:
+        bot.send_message(call.message.chat.id, "❌ ناموفق بود.")
+
+    delete_file(path)
+    clear_state(user_id)
+    bot.send_message(call.message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
 
 
 # ============================================================
@@ -405,7 +646,6 @@ def _process_noaudio(message, user_id: int, path: str):
     if output and os.path.exists(output):
         size = os.path.getsize(output)
         with open(output, "rb") as f:
-            # 👇 send_video به جای send_document
             bot.send_video(
                 message.chat.id, f,
                 caption=f"🔇 <b>ویدیو بدون صدا</b>\n📊 {human_size(size)}",
@@ -453,8 +693,7 @@ def adv_concat_second(message):
         with open(video2, "wb") as f:
             f.write(downloaded)
 
-        bot.send_message(message.chat.id, "⏳ در حال ترکیب... (ممکنه چند ثانیه طول بکشه)")
-
+        bot.send_message(message.chat.id, "⏳ در حال ترکیب...")
         output = concat_videos(video1, video2)
 
         if output and os.path.exists(output):
@@ -606,7 +845,7 @@ def adv_music_audio(message):
 
 
 # ============================================================
-# 🎬 اسلایدشو — دریافت عکس‌ها
+# 🎬 اسلایدشو
 # ============================================================
 @bot.message_handler(
     content_types=['photo', 'document'],
@@ -636,17 +875,13 @@ def adv_slideshow_add(message):
 
         bot.send_message(
             message.chat.id,
-            f"✅ عکس {len(files)} دریافت شد.\n"
-            "عکس بعدی یا «✅ تمام شد»."
+            f"✅ عکس {len(files)} دریافت شد.\nعکس بعدی یا «✅ تمام شد»."
         )
     except Exception as e:
         logger.exception("خطا")
         bot.send_message(message.chat.id, f"❌ خطا: {e}")
 
 
-# ============================================================
-# ✅ تمام شد (اسلایدشو)
-# ============================================================
 @bot.message_handler(
     func=lambda m: m.text in ('✅ تمام شد', '❌ انصراف')
         and get_state(m.from_user.id).get("waiting_for") == "adv_slideshow_more"
@@ -661,11 +896,7 @@ def adv_slideshow_finish(message):
         for f in files:
             delete_file(f)
         clear_state(user_id)
-        bot.send_message(
-            message.chat.id,
-            "❌ لغو شد.",
-            reply_markup=main_menu_keyboard(user_id)
-        )
+        bot.send_message(message.chat.id, "❌ لغو شد.", reply_markup=main_menu_keyboard(user_id))
         return
 
     if len(files) < 2:
@@ -691,47 +922,6 @@ def adv_slideshow_finish(message):
 
     for f in files:
         delete_file(f)
-    clear_state(user_id)
-    bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
-
-
-# ============================================================
-# 🔊 کارائوکه (حذف صدای خواننده)
-# ============================================================
-def _process_karaoke(message, user_id: int, path: str):
-    bot.send_message(message.chat.id, "⏳ در حال حذف صدای خواننده... (چند ثانیه)")
-
-    result = remove_vocals(path)
-
-    if result.get("success") and result.get("path"):
-        output = result["path"]
-        size = os.path.getsize(output)
-        with open(output, "rb") as f:
-            bot.send_audio(
-                message.chat.id, f,
-                caption=f"🔊 <b>کارائوکه (بدون خواننده)</b>\n📊 {human_size(size)}\n\n"
-                        f"⚠️ این روش ساده‌ست و کامل نیست.",
-                parse_mode='HTML'
-            )
-        delete_file(output)
-        mark_user_used(user_id)
-    else:
-        if not result.get("is_stereo"):
-            bot.send_message(
-                message.chat.id,
-                "❌ <b>فایل مونو است</b>\n\n"
-                "برای حذف صدای خواننده، فایل باید <b>استریو</b> باشه.\n\n"
-                "💡 چرا؟ چون این روش با تفریق دو کانال کار می‌کنه.\n"
-                "اگه فایل مونو باشه، هر دو کانال یکسانن و تفریق صفر میشه.",
-                parse_mode='HTML'
-            )
-        else:
-            bot.send_message(
-                message.chat.id,
-                f"❌ ناموفق بود: {result.get('error', 'نامشخص')}"
-            )
-
-    delete_file(path)
     clear_state(user_id)
     bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
 

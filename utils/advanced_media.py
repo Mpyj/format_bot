@@ -143,68 +143,6 @@ def images_to_video(image_paths: list, audio_path: str = None, duration_per_imag
 
 
 # ============================================================
-# 🔊 حذف صدای خواننده (بهبودیافته)
-# ============================================================
-def check_if_stereo(input_path: str) -> bool:
-    """چک کن فایل استریو هست یا نه"""
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe", "-v", "error",
-                "-select_streams", "a:0",
-                "-show_entries", "stream=channels",
-                "-of", "default=noprint_wrappers=1:nokey=1",
-                input_path,
-            ],
-            capture_output=True, text=True, timeout=15,
-        )
-        channels = int(result.stdout.strip() or "0")
-        return channels >= 2
-    except Exception:
-        return False
-
-
-def remove_vocals(input_path: str) -> dict:
-    """
-    حذف صدای خواننده (روش ساده).
-    برمی‌گردونه: {"success": bool, "path": str | None, "error": str | None, "is_stereo": bool}
-    """
-    result = {"success": False, "path": None, "error": None, "is_stereo": False}
-
-    # چک استریو
-    is_stereo = check_if_stereo(input_path)
-    result["is_stereo"] = is_stereo
-
-    if not is_stereo:
-        result["error"] = "فایل مونو است. برای حذف خواننده، فایل باید استریو باشه."
-        return result
-
-    ext = os.path.splitext(input_path)[1].lstrip(".").lower()
-    if ext not in ("mp3", "wav", "ogg", "m4a"):
-        ext = "mp3"
-    output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_karaoke.{ext}")
-
-    # فیلتر karaoke (فقط برای استریو)
-    ok = _run_ffmpeg([
-        "-i", input_path,
-        "-af",
-        "pan=stereo|c0=c0-c1|c1=c1-c0,"
-        "highpass=f=200,"
-        "lowpass=f=12000",
-        "-ac", "2",
-        output,
-    ])
-
-    if ok and os.path.exists(output):
-        result["success"] = True
-        result["path"] = output
-    else:
-        result["error"] = "خطا در پردازش"
-
-    return result
-
-
-# ============================================================
 # 📊 نمودار موج
 # ============================================================
 def audio_waveform(input_path: str) -> str | None:
@@ -351,17 +289,10 @@ def concat_videos(video1: str, video2: str) -> str | None:
 
 
 # ============================================================
-# 🔇 حذف صدا (اصلاح‌شده — خروجی mp4 قطعی)
+# 🔇 حذف صدا
 # ============================================================
 def remove_audio(input_path: str) -> str | None:
-    """
-    صدای ویدیو رو حذف می‌کنه.
-    ⚠️ خروجی با کدک H.264 و فرمت mp4 هست تا تلگرام به عنوان ویدیو بشناسه.
-    """
     output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_noaudio.mp4")
-
-    # اگه ورودی mp4 بود، کپی کن (سریع‌تر)
-    # اگه نبود، انکود کن
     ext = os.path.splitext(input_path)[1].lstrip(".").lower()
 
     if ext == "mp4":
@@ -374,7 +305,6 @@ def remove_audio(input_path: str) -> str | None:
             output,
         ])
     else:
-        # انکود مجدد با H.264
         ok = _run_ffmpeg([
             "-i", input_path,
             "-an",
@@ -385,4 +315,90 @@ def remove_audio(input_path: str) -> str | None:
             output,
         ])
 
+    return output if ok and os.path.exists(output) else None
+
+
+# ============================================================
+# 🔊 افزایش صدا (amplify)
+# ============================================================
+def amplify_audio(input_path: str, factor: float = 2.0) -> str | None:
+    """
+    صدای فایل رو بلندتر می‌کنه.
+    factor: 1.5 = ۱.۵ برابر، 2.0 = ۲ برابر، 3.0 = ۳ برابر
+    """
+    ext = os.path.splitext(input_path)[1].lstrip(".").lower()
+    if ext not in ("mp3", "wav", "ogg", "m4a"):
+        ext = "mp3"
+    output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_loud.{ext}")
+
+    # استفاده از فیلتر volume
+    # برای جلوگیری از کلیپ، از compand هم استفاده می‌کنیم
+    ok = _run_ffmpeg([
+        "-i", input_path,
+        "-af", f"volume={factor},acompressor=threshold=-20dB:ratio=4:attack=5:release=50",
+        output,
+    ])
+    return output if ok and os.path.exists(output) else None
+
+
+# ============================================================
+# 🎵 افزودن Reverb (echo)
+# ============================================================
+def add_reverb(input_path: str, reverb_level: str = "medium") -> str | None:
+    """
+    افکت Reverb (echo) به صدا اضافه می‌کنه.
+    reverb_level: small, medium, large
+    """
+    ext = os.path.splitext(input_path)[1].lstrip(".").lower()
+    if ext not in ("mp3", "wav", "ogg", "m4a"):
+        ext = "mp3"
+    output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_reverb.{ext}")
+
+    # پریست‌های reverb
+    presets = {
+        "small": "aecho=0.8:0.88:60:0.4",
+        "medium": "aecho=0.8:0.88:200:0.5",
+        "large": "aecho=0.8:0.88:400:0.6",
+    }
+
+    filter_str = presets.get(reverb_level, presets["medium"])
+
+    ok = _run_ffmpeg([
+        "-i", input_path,
+        "-af", filter_str,
+        output,
+    ])
+    return output if ok and os.path.exists(output) else None
+
+
+# ============================================================
+# 🎚 تغییر سرعت صدا (بدون تغییر پیچ)
+# ============================================================
+def change_audio_speed(input_path: str, speed: float = 1.5) -> str | None:
+    """
+    سرعت صدا رو تغییر می‌ده (بدون تغییر پیچ).
+    speed: 0.5 = آروم‌تر، 2.0 = سریع‌تر
+    """
+    ext = os.path.splitext(input_path)[1].lstrip(".").lower()
+    if ext not in ("mp3", "wav", "ogg", "m4a"):
+        ext = "mp3"
+    output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_speed.{ext}")
+
+    # atempo فقط بین 0.5 تا 2.0 کار می‌کنه — برای خارج از این، زنجیره‌ای
+    audio_filter = []
+    remaining = speed
+    while remaining > 2.0:
+        audio_filter.append("atempo=2.0")
+        remaining /= 2.0
+    while remaining < 0.5:
+        audio_filter.append("atempo=0.5")
+        remaining /= 0.5
+    audio_filter.append(f"atempo={remaining}")
+    filter_str = ",".join(audio_filter)
+
+    ok = _run_ffmpeg([
+        "-i", input_path,
+        "-af", filter_str,
+        output,
+    ])
     return output if ok and os.path.exists(output) else None
