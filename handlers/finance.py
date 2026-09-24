@@ -13,9 +13,8 @@ from handlers.middleware import check_usage_limit, mark_user_used
 logger = logging.getLogger(__name__)
 
 
-# ---------- شروع ----------
+# ---------- شروع (بدون محدودیت) ----------
 @bot.message_handler(func=lambda m: m.text == '💰 ابزار مالی')
-@check_usage_limit
 def finance_start(message):
     user_id = message.from_user.id
     set_state(user_id, mode="finance", waiting_for=None)
@@ -202,7 +201,6 @@ def crypto_chosen(call):
 # 💱 نرخ ارز
 # ============================================================
 def _rates_menu(call, user_id: int):
-    """منوی انتخاب پایه نرخ ارز"""
     set_state(user_id, waiting_for="rates_base")
 
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -238,7 +236,6 @@ def rates_base_chosen(call):
 
 
 def _show_rates_usd(call, user_id: int):
-    """نرخ‌ها نسبت به دلار"""
     info = get_global_rates("USD")
 
     if not info.get("success"):
@@ -277,7 +274,6 @@ def _show_rates_usd(call, user_id: int):
 
 
 def _show_rates_irr(call, user_id: int):
-    """نرخ‌ها به تومان"""
     iran_info = get_iran_rates()
     if not iran_info.get("success"):
         try:
