@@ -4,6 +4,7 @@ import logging
 import subprocess
 from config import TEMP_DIR
 from utils.media_tools import get_media_info
+
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 180
@@ -144,31 +145,48 @@ def images_to_video(image_paths: list, audio_path: str = None, duration_per_imag
 # ============================================================
 # 🔊 حذف صدای خواننده (بهبودیافته)
 # ============================================================
-def remove_vocals(input_path: str) -> str | None:
+def check_if_stereo(input_path: str) -> bool:
+    """چک کن فایل استریو هست یا نه"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=channels",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                input_path,
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        channels = int(result.stdout.strip() or "0")
+        return channels >= 2
+    except Exception:
+        return False
+
+
+def remove_vocals(input_path: str) -> dict:
     """
     حذف صدای خواننده (روش ساده).
-    ⚠️ این روش کامل نیست — فقط تا حدی صدا رو کم می‌کنه.
+    برمی‌گردونه: {"success": bool, "path": str | None, "error": str | None, "is_stereo": bool}
     """
+    result = {"success": False, "path": None, "error": None, "is_stereo": False}
+
+    # چک استریو
+    is_stereo = check_if_stereo(input_path)
+    result["is_stereo"] = is_stereo
+
+    if not is_stereo:
+        result["error"] = "فایل مونو است. برای حذف خواننده، فایل باید استریو باشه."
+        return result
+
     ext = os.path.splitext(input_path)[1].lstrip(".").lower()
     if ext not in ("mp3", "wav", "ogg", "m4a"):
         ext = "mp3"
     output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_karaoke.{ext}")
 
-    # اول به استریو تبدیل کن
-    temp_stereo = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_stereo.wav")
+    # فیلتر karaoke (فقط برای استریو)
     ok = _run_ffmpeg([
         "-i", input_path,
-        "-ac", "2",
-        "-ar", "44100",
-        temp_stereo,
-    ])
-
-    if not ok:
-        return None
-
-    # فیلتر karaoke
-    ok = _run_ffmpeg([
-        "-i", temp_stereo,
         "-af",
         "pan=stereo|c0=c0-c1|c1=c1-c0,"
         "highpass=f=200,"
@@ -177,12 +195,13 @@ def remove_vocals(input_path: str) -> str | None:
         output,
     ])
 
-    try:
-        os.remove(temp_stereo)
-    except Exception:
-        pass
+    if ok and os.path.exists(output):
+        result["success"] = True
+        result["path"] = output
+    else:
+        result["error"] = "خطا در پردازش"
 
-    return output if ok and os.path.exists(output) else None
+    return result
 
 
 # ============================================================
@@ -274,12 +293,10 @@ def timelapse(input_path: str, speed: float = 4.0) -> str | None:
 
 
 # ============================================================
-# 🎞 ترکیب دو ویدیو (اصلاح‌شده)
+# 🎞 ترکیب دو ویدیو
 # ============================================================
 def concat_videos(video1: str, video2: str) -> str | None:
-    """ترکیب دو ویدیو — با بررسی صدا"""
     try:
-        # چک کن صدا دارن یا نه
         info1 = get_media_info(video1)
         info2 = get_media_info(video2)
 
@@ -289,7 +306,6 @@ def concat_videos(video1: str, video2: str) -> str | None:
         output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_concat.mp4")
 
         if has_audio1 and has_audio2:
-            # هر دو صدا دارن
             filter_complex = (
                 "[0:v]scale=1280:720:force_original_aspect_ratio=decrease,"
                 "pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v0];"
@@ -310,7 +326,6 @@ def concat_videos(video1: str, video2: str) -> str | None:
                 output,
             ])
         else:
-            # حداقل یکی صدا نداره
             filter_complex = (
                 "[0:v]scale=1280:720:force_original_aspect_ratio=decrease,"
                 "pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v0];"
@@ -336,18 +351,38 @@ def concat_videos(video1: str, video2: str) -> str | None:
 
 
 # ============================================================
-# 🔇 حذف صدا (اصلاح‌شده)
+# 🔇 حذف صدا (اصلاح‌شده — خروجی mp4 قطعی)
 # ============================================================
 def remove_audio(input_path: str) -> str | None:
-    """صدای ویدیو رو حذف می‌کنه (خروجی MP4)"""
+    """
+    صدای ویدیو رو حذف می‌کنه.
+    ⚠️ خروجی با کدک H.264 و فرمت mp4 هست تا تلگرام به عنوان ویدیو بشناسه.
+    """
     output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_noaudio.mp4")
 
-    ok = _run_ffmpeg([
-        "-i", input_path,
-        "-an",
-        "-c:v", "copy",
-        "-f", "mp4",
-        "-movflags", "+faststart",
-        output,
-    ])
+    # اگه ورودی mp4 بود، کپی کن (سریع‌تر)
+    # اگه نبود، انکود کن
+    ext = os.path.splitext(input_path)[1].lstrip(".").lower()
+
+    if ext == "mp4":
+        ok = _run_ffmpeg([
+            "-i", input_path,
+            "-an",
+            "-c:v", "copy",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            output,
+        ])
+    else:
+        # انکود مجدد با H.264
+        ok = _run_ffmpeg([
+            "-i", input_path,
+            "-an",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            output,
+        ])
+
     return output if ok and os.path.exists(output) else None

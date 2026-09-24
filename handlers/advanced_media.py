@@ -57,7 +57,9 @@ def _back_markup():
     )
 
 
-# ---------- شروع ----------
+# ============================================================
+# شروع
+# ============================================================
 @bot.message_handler(func=lambda m: m.text == '🎬 مدیا پیشرفته')
 def adv_media_start(message):
     user_id = message.from_user.id
@@ -82,13 +84,15 @@ def adv_media_start(message):
     )
 
 
-# ---------- callback ها ----------
+# ============================================================
+# callback ها
+# ============================================================
 @bot.callback_query_handler(func=lambda c: c.data.startswith("adv_media_"))
 def adv_media_action(call):
     user_id = call.from_user.id
     action = call.data.replace("adv_media_", "")
 
-    # 👇 back
+    # 🔙 back
     if action == "back":
         bot.answer_callback_query(call.id)
         clear_state(user_id)
@@ -107,7 +111,7 @@ def adv_media_action(call):
             )
         return
 
-    # 👇 close
+    # ❌ close
     if action == "close":
         clear_state(user_id)
         bot.answer_callback_query(call.id, "بسته شد")
@@ -124,6 +128,35 @@ def adv_media_action(call):
 
     bot.answer_callback_query(call.id)
 
+    # 🎬 اسلایدشو حالت خاص داره
+    if action == "slideshow":
+        set_state(user_id, mode="adv_media", adv_action="slideshow",
+                  waiting_for="adv_slideshow_more", adv_slideshow_files=[])
+        try:
+            bot.edit_message_text(
+                "🎬 <b>عکس → ویدیو</b>\n\n"
+                "چند عکس بفرست (به ترتیب).\n"
+                "وقتی همه رو فرستادی، دکمه «✅ تمام شد» رو بزن.\n\n"
+                "💡 حداقل ۲ عکس لازمه.",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML',
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add(
+                    types.KeyboardButton('✅ تمام شد'),
+                    types.KeyboardButton('❌ انصراف')
+                )
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "🎬 <b>عکس → ویدیو</b>\n\nچند عکس بفرست:",
+                parse_mode='HTML',
+                reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add(
+                    types.KeyboardButton('✅ تمام شد'),
+                    types.KeyboardButton('❌ انصراف')
+                )
+            )
+        return
+
     hints = {
         "frame": "📸 <b>استخراج فریم</b>\n\nویدیو رو بفرست تا از ثانیه دلخواه عکس بگیرم.",
         "thumb": "🖼️ <b>Thumbnail</b>\n\nویدیو رو بفرست تا بهترین فریم رو انتخاب کنم.",
@@ -132,8 +165,8 @@ def adv_media_action(call):
         "concat": "🎞 <b>ترکیب ۲ ویدیو</b>\n\nویدیو <b>اول</b> رو بفرست.",
         "subtitle": "📝 <b>افزودن زیرنویس</b>\n\nویدیو رو بفرست، بعد فایل SRT.",
         "music": "🎵 <b>افزودن موسیقی</b>\n\nویدیو رو بفرست، بعد فایل صوتی.",
-        "slideshow": "🎬 <b>عکس → ویدیو</b>\n\nچند عکس بفرست، بعد دکمه «✅ تمام شد».",
-        "karaoke": "🔊 <b>حذف صدا خواننده</b>\n\nفایل صوتی (استریو) رو بفرست.",
+        "karaoke": "🔊 <b>حذف صدا خواننده</b>\n\nفایل صوتی (استریو) رو بفرست.\n\n"
+                   "⚠️ این روش ساده‌ست و کامل نیست.",
         "waveform": "📊 <b>نمودار موج صدا</b>\n\nفایل صوتی رو بفرست.",
     }
 
@@ -235,9 +268,6 @@ def adv_receive_media(message):
         elif action == "music":
             set_state(user_id, waiting_for="adv_music_audio")
             bot.send_message(message.chat.id, "✅ ویدیو دریافت شد.\n\nالان موسیقی رو بفرست:")
-        elif action == "slideshow":
-            # عکس‌ها جدا مدیریت میشن (توی هندلر دیگه)
-            pass
         elif action == "karaoke":
             _process_karaoke(message, user_id, path)
         elif action == "waveform":
@@ -352,7 +382,8 @@ def adv_timelapse_speed(call):
             bot.send_video(
                 call.message.chat.id, f,
                 caption=f"⏱ <b>تایم‌لپس {speed}x</b>\n📊 {human_size(size)}",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                supports_streaming=True,
             )
         delete_file(output)
         mark_user_used(user_id)
@@ -374,10 +405,12 @@ def _process_noaudio(message, user_id: int, path: str):
     if output and os.path.exists(output):
         size = os.path.getsize(output)
         with open(output, "rb") as f:
-            bot.send_document(
+            # 👇 send_video به جای send_document
+            bot.send_video(
                 message.chat.id, f,
                 caption=f"🔇 <b>ویدیو بدون صدا</b>\n📊 {human_size(size)}",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                supports_streaming=True,
             )
         delete_file(output)
         mark_user_used(user_id)
@@ -430,7 +463,8 @@ def adv_concat_second(message):
                 bot.send_video(
                     message.chat.id, f,
                     caption=f"🎞 <b>ترکیب انجام شد</b>\n📊 {human_size(size)}",
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    supports_streaming=True,
                 )
             delete_file(output)
             mark_user_used(user_id)
@@ -489,7 +523,8 @@ def adv_subtitle_srt(message):
                 bot.send_video(
                     message.chat.id, f,
                     caption=f"📝 <b>زیرنویس افزوده شد</b>\n📊 {human_size(size)}",
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    supports_streaming=True,
                 )
             delete_file(output)
             mark_user_used(user_id)
@@ -550,7 +585,8 @@ def adv_music_audio(message):
                 bot.send_video(
                     message.chat.id, f,
                     caption=f"🎵 <b>موسیقی افزوده شد</b>\n📊 {human_size(size)}",
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    supports_streaming=True,
                 )
             delete_file(output)
             mark_user_used(user_id)
@@ -609,19 +645,6 @@ def adv_slideshow_add(message):
 
 
 # ============================================================
-# 🎬 اسلایدشو — هندلر شروع
-# ============================================================
-@bot.callback_query_handler(func=lambda c: c.data == "adv_media_slideshow")
-def adv_slideshow_start(call):
-    # این با هندلر قبلی تداخل داره، ولی چون قبلی `pass` می‌کنه، اینجا هندل میشه
-    pass
-
-
-# ولی چون `adv_media_action` قبلی `pass` می‌کنه، اینجا کار نمیکنه. راه‌حل:
-# توی `adv_media_action`، به جای `pass`، این کار رو بکن:
-
-
-# ============================================================
 # ✅ تمام شد (اسلایدشو)
 # ============================================================
 @bot.message_handler(
@@ -658,7 +681,8 @@ def adv_slideshow_finish(message):
             bot.send_video(
                 message.chat.id, f,
                 caption=f"🎬 <b>اسلایدشو</b>\n🖼 {len(files)} عکس\n📊 {human_size(size)}",
-                parse_mode='HTML'
+                parse_mode='HTML',
+                supports_streaming=True,
             )
         delete_file(output)
         mark_user_used(user_id)
@@ -672,24 +696,40 @@ def adv_slideshow_finish(message):
 
 
 # ============================================================
-# 🔊 کارائوکه
+# 🔊 کارائوکه (حذف صدای خواننده)
 # ============================================================
 def _process_karaoke(message, user_id: int, path: str):
-    bot.send_message(message.chat.id, "⏳ در حال حذف صدای خواننده...")
-    output = remove_vocals(path)
+    bot.send_message(message.chat.id, "⏳ در حال حذف صدای خواننده... (چند ثانیه)")
 
-    if output and os.path.exists(output):
+    result = remove_vocals(path)
+
+    if result.get("success") and result.get("path"):
+        output = result["path"]
         size = os.path.getsize(output)
         with open(output, "rb") as f:
             bot.send_audio(
                 message.chat.id, f,
-                caption=f"🔊 <b>کارائوکه</b>\n📊 {human_size(size)}",
+                caption=f"🔊 <b>کارائوکه (بدون خواننده)</b>\n📊 {human_size(size)}\n\n"
+                        f"⚠️ این روش ساده‌ست و کامل نیست.",
                 parse_mode='HTML'
             )
         delete_file(output)
         mark_user_used(user_id)
     else:
-        bot.send_message(message.chat.id, "❌ ناموفق بود.\n\n💡 فایل باید استریو باشه.")
+        if not result.get("is_stereo"):
+            bot.send_message(
+                message.chat.id,
+                "❌ <b>فایل مونو است</b>\n\n"
+                "برای حذف صدای خواننده، فایل باید <b>استریو</b> باشه.\n\n"
+                "💡 چرا؟ چون این روش با تفریق دو کانال کار می‌کنه.\n"
+                "اگه فایل مونو باشه، هر دو کانال یکسانن و تفریق صفر میشه.",
+                parse_mode='HTML'
+            )
+        else:
+            bot.send_message(
+                message.chat.id,
+                f"❌ ناموفق بود: {result.get('error', 'نامشخص')}"
+            )
 
     delete_file(path)
     clear_state(user_id)
