@@ -11,6 +11,7 @@ def main_menu_keyboard(user_id: int = None):
         types.KeyboardButton('🌐 تحلیل سایت'),
         types.KeyboardButton('🌐 ابزار شبکه'),
         types.KeyboardButton('💰 ابزار مالی'),
+        types.KeyboardButton('🛠 ابزار متنی'),
         types.KeyboardButton('📱 ساخت QR Code'),
         types.KeyboardButton('🎵 مبدل مدیا'),
         types.KeyboardButton('📄 ابزار PDF'),

@@ -23,3 +23,4 @@ hijri-converter
 sympy
 beautifulsoup4
 lxml
+pyfiglet
