@@ -1,0 +1,284 @@
+import logging
+from telebot import types
+
+from main import bot
+from utils.states import set_state, get_state, clear_state
+from utils.finance_tools import (
+    get_crypto_price, get_global_rates, get_iran_rates,
+    convert_date, calculate, CRYPTO_NAMES, CURRENCY_NAMES,
+)
+from utils.keyboards import main_menu_keyboard
+from handlers.middleware import check_usage_limit, mark_user_used
+
+logger = logging.getLogger(__name__)
+
+
+# ---------- شروع ----------
+@bot.message_handler(func=lambda m: m.text == '💰 ابزار مالی')
+@check_usage_limit
+def finance_start(message):
+    user_id = message.from_user.id
+    set_state(user_id, mode="finance", waiting_for=None)
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("💵 ارز دیجیتال", callback_data="fin_op_crypto"),
+        types.InlineKeyboardButton("💱 نرخ ارز", callback_data="fin_op_rates"),
+    )
+    markup.add(
+        types.InlineKeyboardButton("🥇 طلا و سکه", callback_data="fin_op_iran"),
+        types.InlineKeyboardButton("📅 تبدیل تاریخ", callback_data="fin_op_date"),
+    )
+    markup.add(
+        types.InlineKeyboardButton("🧮 ماشین حساب", callback_data="fin_op_calc"),
+    )
+    markup.add(types.InlineKeyboardButton("❌ انصراف", callback_data="fin_op_cancel"))
+
+    bot.send_message(
+        message.chat.id,
+        "💰 <b>ابزار مالی</b>\n\n"
+        "💵 <b>ارز دیجیتال</b> — BTC، ETH، USDT و ...\n"
+        "💱 <b>نرخ ارز</b> — دلار، یورو، پوند جهانی\n"
+        "🥇 <b>طلا و سکه</b> — طلای ۱۸ عیار، سکه امامی\n"
+        "📅 <b>تبدیل تاریخ</b> — شمسی ↔ میلادی ↔ قمری\n"
+        "🧮 <b>ماشین حساب</b> — محاسبات ریاضی",
+        parse_mode='HTML',
+        reply_markup=markup
+    )
+
+
+# ---------- انتخاب عملیات ----------
+@bot.callback_query_handler(func=lambda c: c.data.startswith("fin_op_"))
+def finance_action(call):
+    user_id = call.from_user.id
+    action = call.data.replace("fin_op_", "")
+
+    if action == "cancel":
+        clear_state(user_id)
+        bot.answer_callback_query(call.id, "لغو شد")
+        bot.edit_message_text(
+            "❌ عملیات لغو شد.",
+            call.message.chat.id, call.message.message_id
+        )
+        bot.send_message(call.message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
+        return
+
+    bot.answer_callback_query(call.id)
+
+    if action == "crypto":
+        _crypto_menu(call, user_id)
+    elif action == "rates":
+        _show_rates(call, user_id)
+    elif action == "iran":
+        _show_iran(call, user_id)
+    elif action == "date":
+        set_state(user_id, waiting_for="fin_date")
+        bot.edit_message_text(
+            "📅 <b>تبدیل تاریخ</b>\n\n"
+            "تاریخ رو بفرست:\n\n"
+            "💡 مثال:\n"
+            "• <code>1403/06/15</code> (شمسی)\n"
+            "• <code>2024-09-05</code> (میلادی)",
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML'
+        )
+    elif action == "calc":
+        set_state(user_id, waiting_for="fin_calc")
+        bot.edit_message_text(
+            "🧮 <b>ماشین حساب</b>\n\n"
+            "عبارت ریاضی رو بفرست:\n\n"
+            "💡 مثال:\n"
+            "• <code>25 * 4 + 100</code>\n"
+            "• <code>2^10</code>\n"
+            "• <code>(15 + 5) / 4</code>",
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML'
+        )
+
+
+# ============================================================
+# 💵 ارز دیجیتال
+# ============================================================
+def _crypto_menu(call, user_id: int):
+    set_state(user_id, waiting_for="fin_crypto")
+
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    buttons = [
+        types.InlineKeyboardButton(name, callback_data=f"crypto_{sym}")
+        for sym, (_, name, _) in CRYPTO_NAMES.items()
+    ]
+    markup.add(*buttons)
+
+    bot.edit_message_text(
+        "💵 <b>ارز دیجیتال</b>\n\n"
+        "یه ارز انتخاب کن:",
+        call.message.chat.id, call.message.message_id,
+        parse_mode='HTML', reply_markup=markup
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("crypto_"))
+def crypto_chosen(call):
+    user_id = call.from_user.id
+    symbol = call.data.replace("crypto_", "")
+
+    bot.answer_callback_query(call.id, "در حال دریافت...")
+
+    info = get_crypto_price(symbol)
+
+    if not info.get("success"):
+        bot.edit_message_text(
+            f"❌ خطا: {info.get('error', 'ناشناخته')}",
+            call.message.chat.id, call.message.message_id
+        )
+        return
+
+    change = info["change_24h"]
+    if change > 0:
+        change_emoji = "🟢"
+        change_str = f"+{change:.2f}%"
+    elif change < 0:
+        change_emoji = "🔴"
+        change_str = f"{change:.2f}%"
+    else:
+        change_emoji = "⚪"
+        change_str = "0%"
+
+    text = (
+        f"💵 <b>{info['name']} ({info['ticker']})</b>\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"💰 <b>قیمت:</b> ${info['price_usd']:,.2f}\n"
+        f"{change_emoji} <b>تغییر ۲۴ساعت:</b> {change_str}\n"
+        f"📊 <b>حجم ۲۴ساعت:</b> ${info['volume_24h']:,.0f}\n\n"
+        f"🕐 آخرین آپدیت: {info['updated']}"
+    )
+
+    bot.edit_message_text(
+        text,
+        call.message.chat.id, call.message.message_id,
+        parse_mode='HTML'
+    )
+    mark_user_used(user_id)
+
+
+# ============================================================
+# 💱 نرخ ارز
+# ============================================================
+def _show_rates(call, user_id: int):
+    bot.answer_callback_query(call.id, "در حال دریافت...")
+
+    info = get_global_rates("USD")
+
+    if not info.get("success"):
+        bot.edit_message_text(
+            f"❌ خطا: {info.get('error', 'ناشناخته')}",
+            call.message.chat.id, call.message.message_id
+        )
+        return
+
+    text = "💱 <b>نرخ ارز (نسبت به دلار)</b>\n━━━━━━━━━━━━━━━\n\n"
+
+    for code in ["EUR", "GBP", "AED", "TRY", "CNY", "RUB", "CAD", "AUD", "JPY"]:
+        rate = info["rates"].get(code)
+        if rate:
+            name = CURRENCY_NAMES.get(code, code)
+            text += f"{name}: <code>{rate:.4f}</code>\n"
+
+    text += f"\n🕐 {info.get('updated', '')}"
+
+    bot.edit_message_text(
+        text,
+        call.message.chat.id, call.message.message_id,
+        parse_mode='HTML'
+    )
+    mark_user_used(user_id)
+
+
+# ============================================================
+# 🥇 طلا و سکه
+# ============================================================
+def _show_iran(call, user_id: int):
+    bot.answer_callback_query(call.id, "در حال دریافت...")
+
+    info = get_iran_rates()
+
+    if not info.get("success"):
+        bot.edit_message_text(
+            f"❌ خطا: {info.get('error', 'ناشناخته')}",
+            call.message.chat.id, call.message.message_id
+        )
+        return
+
+    data = info["data"]
+    text = "🥇 <b>قیمت طلا و سکه (تومان)</b>\n━━━━━━━━━━━━━━━\n\n"
+
+    for name, price in data.items():
+        if isinstance(price, int):
+            text += f"• <b>{name}:</b> {price:,}\n"
+        else:
+            text += f"• <b>{name}:</b> {price}\n"
+
+    text += f"\n🕐 {info.get('updated', '')}"
+
+    bot.edit_message_text(
+        text,
+        call.message.chat.id, call.message.message_id,
+        parse_mode='HTML'
+    )
+    mark_user_used(user_id)
+
+
+# ============================================================
+# 📅 تبدیل تاریخ
+# ============================================================
+@bot.message_handler(
+    func=lambda m: get_state(m.from_user.id).get("waiting_for") == "fin_date"
+        and m.text
+)
+def date_receive(message):
+    user_id = message.from_user.id
+    info = convert_date(message.text.strip())
+
+    if not info.get("success"):
+        bot.send_message(message.chat.id, f"❌ خطا: {info.get('error', 'ناشناخته')}")
+    else:
+        text = (
+            f"📅 <b>تبدیل تاریخ</b>\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"🇮🇷 <b>شمسی:</b> <code>{info['jalali']}</code>\n"
+            f"🌍 <b>میلادی:</b> <code>{info['gregorian']}</code>\n"
+            f"🌙 <b>قمری:</b> <code>{info['hijri']}</code>\n"
+            f"📆 <b>روز هفته:</b> {info['weekday']}"
+        )
+        bot.send_message(message.chat.id, text, parse_mode='HTML')
+        mark_user_used(user_id)
+
+    clear_state(user_id)
+    bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
+
+
+# ============================================================
+# 🧮 ماشین حساب
+# ============================================================
+@bot.message_handler(
+    func=lambda m: get_state(m.from_user.id).get("waiting_for") == "fin_calc"
+        and m.text
+)
+def calc_receive(message):
+    user_id = message.from_user.id
+    info = calculate(message.text.strip())
+
+    if not info.get("success"):
+        bot.send_message(message.chat.id, f"❌ خطا: {info.get('error', 'ناشناخته')}")
+    else:
+        text = (
+            f"🧮 <b>ماشین حساب</b>\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"📝 <b>عبارت:</b> <code>{info['expression']}</code>\n"
+            f"✅ <b>نتیجه:</b> <code>{info['result']}</code>"
+        )
+        bot.send_message(message.chat.id, text, parse_mode='HTML')
+        mark_user_used(user_id)
+
+    clear_state(user_id)
+    bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))

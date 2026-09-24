@@ -4,6 +4,7 @@ from . import ocr
 from . import archive
 from . import site
 from . import network
+from . import finance
 from . import media
 from . import pdf
 from . import creativity

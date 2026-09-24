@@ -18,3 +18,8 @@ deep-translator
 persian-speech
 python-whois
 dnspython
+jdatetime
+hijri-converter
+sympy
+beautifulsoup4
+lxml
