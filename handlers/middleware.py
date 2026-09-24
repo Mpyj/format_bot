@@ -34,20 +34,23 @@ def is_subscribed(chat_id: int, user_id: int) -> bool:
 
 def send_join_message(chat_id: int):
     """پیام عضویت در کانال رو با دکمه می‌فرسته"""
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("📢 عضویت در کانال", url=CHANNEL_LINK),
-        types.InlineKeyboardButton("✅ عضو شدم", callback_data="check_sub")
-    )
-    bot.send_message(
-        chat_id,
-        "⚠️ <b>دسترسی محدود</b>\n\n"
-        "شما قبلاً از قابلیت‌های ربات استفاده کرده‌اید.\n"
-        "برای استفاده مجدد، لطفاً عضو کانال ما شوید:\n\n"
-        f"👉 {CHANNEL_LINK}",
-        parse_mode='HTML',
-        reply_markup=markup
-    )
+    try:
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton("📢 عضویت در کانال", url=CHANNEL_LINK),
+            types.InlineKeyboardButton("✅ عضو شدم", callback_data="check_sub")
+        )
+        bot.send_message(
+            chat_id,
+            "⚠️ <b>دسترسی محدود</b>\n\n"
+            "شما قبلاً از قابلیت‌های ربات استفاده کرده‌اید.\n"
+            "برای استفاده مجدد، لطفاً عضو کانال ما شوید:\n\n"
+            f"👉 {CHANNEL_LINK}",
+            parse_mode='HTML',
+            reply_markup=markup
+        )
+    except Exception as e:
+        logger.warning(f"خطا در ارسال پیام عضویت: {e}")
 
 
 def mark_user_used(user_id: int):
@@ -82,22 +85,31 @@ def check_usage_limit(func):
             pass
 
         # ۳) چک بن
-        if is_user_banned(user_id):
-            bot.send_message(
-                message.chat.id,
-                "🚫 <b>شما از ربات مسدود شده‌اید.</b>\n\n"
-                "اگه فکر می‌کنی اشتباه شده، با ادمین تماس بگیر.",
-                parse_mode='HTML'
-            )
-            return
+        try:
+            if is_user_banned(user_id):
+                try:
+                    bot.send_message(
+                        message.chat.id,
+                        "🚫 <b>شما از ربات مسدود شده‌اید.</b>\n\n"
+                        "اگه فکر می‌کنی اشتباه شده، با ادمین تماس بگیر.",
+                        parse_mode='HTML'
+                    )
+                except Exception:
+                    pass
+                return
+        except Exception as e:
+            logger.warning(f"خطا در چک بن: {e}")
 
         # ۴) چک عضویت کانال
-        if _user_usage.get(user_id, False) and not is_subscribed(CHANNEL_ID, user_id):
-            send_join_message(message.chat.id)
-            return
+        try:
+            if _user_usage.get(user_id, False) and not is_subscribed(CHANNEL_ID, user_id):
+                send_join_message(message.chat.id)
+                return
 
-        if is_subscribed(CHANNEL_ID, user_id):
-            _user_usage[user_id] = False
+            if is_subscribed(CHANNEL_ID, user_id):
+                _user_usage[user_id] = False
+        except Exception as e:
+            logger.warning(f"خطا در چک عضویت: {e}")
 
         return func(message, *args, **kwargs)
     return wrapper
@@ -106,14 +118,17 @@ def check_usage_limit(func):
 # ✅ هندلر برای دکمه «عضو شدم»
 @bot.callback_query_handler(func=lambda c: c.data == "check_sub")
 def check_sub_callback(call):
-    user_id = call.from_user.id
-    if is_subscribed(CHANNEL_ID, user_id):
-        bot.answer_callback_query(call.id, "✅ عضویت تایید شد!")
-        _user_usage[user_id] = False
-        bot.edit_message_text(
-            "✅ عضویت شما تایید شد.\nالان می‌تونید از قابلیت‌ها استفاده کنید.",
-            call.message.chat.id,
-            call.message.message_id
-        )
-    else:
-        bot.answer_callback_query(call.id, "❌ هنوز عضو نشدی!", show_alert=True)
+    try:
+        user_id = call.from_user.id
+        if is_subscribed(CHANNEL_ID, user_id):
+            bot.answer_callback_query(call.id, "✅ عضویت تایید شد!")
+            _user_usage[user_id] = False
+            bot.edit_message_text(
+                "✅ عضویت شما تایید شد.\nالان می‌تونید از قابلیت‌ها استفاده کنید.",
+                call.message.chat.id,
+                call.message.message_id
+            )
+        else:
+            bot.answer_callback_query(call.id, "❌ هنوز عضو نشدی!", show_alert=True)
+    except Exception as e:
+        logger.warning(f"خطا در تایید عضویت: {e}")

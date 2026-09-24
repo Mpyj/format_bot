@@ -44,9 +44,12 @@ async def lifespan(app: FastAPI):
     domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
     if domain and BOT_TOKEN:
         webhook_url = f"https://{domain}/{BOT_TOKEN}"
-        bot.remove_webhook()
-        bot.set_webhook(url=webhook_url)
-        logger.info(f"✅ وبهوک ست شد: {webhook_url}")
+        try:
+            bot.remove_webhook()
+            bot.set_webhook(url=webhook_url)
+            logger.info(f"✅ وبهوک ست شد: {webhook_url}")
+        except Exception as e:
+            logger.error(f"❌ خطا در ست کردن وبهوک: {e}")
     else:
         logger.warning("⚠️ دامنه یا توکن موجود نیست (لوکال؟)")
 
@@ -72,9 +75,12 @@ async def health():
 @app.post(f"/{BOT_TOKEN}")
 async def webhook(request: Request):
     if request.headers.get("content-type") == "application/json":
-        json_string = (await request.body()).decode("utf-8")
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
+        try:
+            json_string = (await request.body()).decode("utf-8")
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+        except Exception as e:
+            logger.warning(f"خطا در پردازش آپدیت: {e}")
         return JSONResponse({"ok": True})
     return JSONResponse({"ok": False}, status_code=403)
 
