@@ -34,6 +34,7 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
         markup.add(
             types.KeyboardButton('🎵 مبدل مدیا'),
             types.KeyboardButton('🎬 مدیا پیشرفته'),
+            types.KeyboardButton('🎨 تصویر پیشرفته'),
             types.KeyboardButton('📄 ابزار PDF'),
             types.KeyboardButton('🎨 جعبه خلاقیت'),
         )
@@ -42,6 +43,7 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('ℹ️ راهنما'),
         )
 
+    # 👑 دکمه ادمین فقط برای ادمین
     if user_id and user_id == ADMIN_ID:
         markup.add(types.KeyboardButton('👑 پنل ادمین'))
 
@@ -49,6 +51,7 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
 
 
 def zip_done_keyboard():
+    """کیبورد حالت ZIP"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('✅ تمام شد'), types.KeyboardButton('❌ انصراف'))
     return markup
