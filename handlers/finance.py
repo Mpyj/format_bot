@@ -2,7 +2,7 @@ import logging
 from telebot import types
 
 from main import bot
-from utils.states import set_state, get_state, clear_state
+from utils.states import set_state, get_state, clear_state, is_menu_button
 from utils.finance_tools import (
     get_crypto_price, get_global_rates, get_iran_rates,
     convert_date, calculate, CRYPTO_NAMES, CURRENCY_NAMES,
@@ -44,7 +44,7 @@ def _back_button_markup(callback_data: str = "fin_back"):
 def finance_start(message):
     user_id = message.from_user.id
 
-    # 👇 اول کل state رو پاک کن
+    # 👇 پاک کردن state قبلی
     clear_state(user_id)
     set_state(user_id, mode="finance", waiting_for=None)
 
@@ -472,6 +472,7 @@ def _show_iran(call, user_id: int):
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "fin_date"
         and get_state(m.from_user.id).get("mode") == "finance"
         and m.text
+        and not is_menu_button(m.text)
 )
 def date_receive(message):
     user_id = message.from_user.id
@@ -502,6 +503,7 @@ def date_receive(message):
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "fin_calc"
         and get_state(m.from_user.id).get("mode") == "finance"
         and m.text
+        and not is_menu_button(m.text)
 )
 def calc_receive(message):
     user_id = message.from_user.id

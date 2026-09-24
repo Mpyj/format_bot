@@ -2,7 +2,7 @@ import logging
 from telebot import types
 
 from main import bot
-from utils.states import set_state, get_state, clear_state
+from utils.states import set_state, get_state, clear_state, is_menu_button
 from utils.network_tools import (
     get_whois, get_dns, scan_ports, test_download_speed, get_ssl_details,
 )
@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 @check_usage_limit
 def network_start(message):
     user_id = message.from_user.id
-
-    # 👇 پاک کردن state قبلی
     clear_state(user_id)
     set_state(user_id, mode="network", waiting_for=None)
 
@@ -86,9 +84,10 @@ def network_action(call):
 # ---------- دریافت ورودی ----------
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for", "").startswith("net_")
-        and get_state(m.from_user.id).get("mode") == "network"  # 👈 این خط مهمه
+        and get_state(m.from_user.id).get("mode") == "network"
         and m.text
         and not m.text.startswith("/")
+        and not is_menu_button(m.text)
 )
 def network_receive(message):
     user_id = message.from_user.id

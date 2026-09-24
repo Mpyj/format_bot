@@ -6,7 +6,7 @@ from telebot import types
 from main import bot
 from config import TEMP_DIR
 from utils.cleanup import delete_file
-from utils.states import set_state, get_state, clear_state
+from utils.states import set_state, get_state, clear_state, is_menu_button
 from utils.site_info import analyze_site
 from utils.qrcode_gen import generate_qr
 from utils.keyboards import main_menu_keyboard
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @check_usage_limit
 def site_start(message):
     user_id = message.from_user.id
+    clear_state(user_id)
     set_state(user_id, mode="site", waiting_for="site_url", input_path=None)
 
     bot.send_message(
@@ -40,8 +41,10 @@ def site_start(message):
 # ---------- دریافت لینک ----------
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "site_url"
+        and get_state(m.from_user.id).get("mode") == "site"
         and m.text
         and not m.text.startswith("/")
+        and not is_menu_button(m.text)
 )
 def receive_site_url(message):
     user_id = message.from_user.id
@@ -64,14 +67,13 @@ def receive_site_url(message):
             bot.send_message(
                 message.chat.id,
                 "❌ نتونستم سایت رو تحلیل کنم. آدرس رو چک کن.",
-                reply_markup=main_menu_keyboard()
+                reply_markup=main_menu_keyboard(user_id)
             )
             clear_state(user_id)
             return
 
         text = _format_result(result)
 
-        # 👇 کلید کوتاه برای callback_data (چون URL طولانی خطا می‌ده)
         token = uuid.uuid4().hex[:12]
         set_state(user_id, site_url_token=token, site_url_for_qr=result["url"])
 
@@ -91,8 +93,6 @@ def receive_site_url(message):
         )
 
         mark_user_used(user_id)
-
-        # state رو نگه‌دار (برای QR)، فقط waiting_for رو پاک کن
         set_state(user_id, waiting_for=None)
 
     except Exception as e:
@@ -100,7 +100,7 @@ def receive_site_url(message):
         bot.send_message(
             message.chat.id,
             f"❌ خطا: {e}",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_id)
         )
         clear_state(user_id)
 
@@ -229,7 +229,7 @@ def site_qr(call):
         bot.send_message(
             call.message.chat.id,
             "می‌خوای کار دیگه‌ای بکنی؟ از منو انتخاب کن 👇",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_id)
         )
     else:
         bot.send_message(call.message.chat.id, "❌ خطا در ساخت QR.")
@@ -240,6 +240,7 @@ def site_qr(call):
 @check_usage_limit
 def qr_tool_start(message):
     user_id = message.from_user.id
+    clear_state(user_id)
     set_state(user_id, mode="qr", waiting_for="qr_text", input_path=None)
 
     bot.send_message(
@@ -257,8 +258,10 @@ def qr_tool_start(message):
 
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "qr_text"
+        and get_state(m.from_user.id).get("mode") == "qr"
         and m.text
         and not m.text.startswith("/")
+        and not is_menu_button(m.text)
 )
 def qr_receive_text(message):
     user_id = message.from_user.id
@@ -304,7 +307,7 @@ def qr_pick_color(call):
         bot.send_message(
             call.message.chat.id,
             "منوی اصلی:",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_id)
         )
         return
 
@@ -333,7 +336,7 @@ def qr_pick_color(call):
         bot.send_message(
             call.message.chat.id,
             "می‌خوای کار دیگه‌ای بکنی؟ از منو انتخاب کن 👇",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_keyboard(user_id)
         )
     else:
         bot.send_message(call.message.chat.id, "❌ خطا در ساخت QR.")
