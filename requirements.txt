@@ -24,3 +24,5 @@ sympy
 beautifulsoup4
 lxml
 pyfiglet
+matplotlib
+numpy

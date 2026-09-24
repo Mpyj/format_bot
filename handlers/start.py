@@ -1,7 +1,7 @@
 from telebot import types
 from main import bot
 from config import ADMIN_ID
-from utils.states import clear_state
+from utils.states import clear_state, get_state, set_state
 from utils.keyboards import main_menu_keyboard
 
 
@@ -11,6 +11,7 @@ def start_handler(message):
 
     # 👇 کل state کاربر رو پاک کن
     clear_state(user_id)
+    set_state(user_id, menu_page=1)
 
     text = (
         f"سلام {message.from_user.first_name} عزیز! 👋\n\n"
@@ -22,8 +23,49 @@ def start_handler(message):
     bot.send_message(
         message.chat.id,
         text,
-        reply_markup=main_menu_keyboard(user_id),
+        reply_markup=main_menu_keyboard(user_id, page=1),
         parse_mode='HTML'
+    )
+
+
+# ============================================================
+# 🔄 ناوبری بین صفحه‌ها
+# ============================================================
+@bot.message_handler(func=lambda m: m.text == '📄 صفحه ۲ ➡️')
+def go_to_page_2(message):
+    user_id = message.from_user.id
+    set_state(user_id, menu_page=2)
+
+    bot.send_message(
+        message.chat.id,
+        "📄 <b>صفحه ۲</b>\n\n"
+        "🎵 <b>مبدل مدیا</b> — MP3، GIF، فرمت، سرعت\n"
+        "🎬 <b>مدیا پیشرفته</b> — فریم، زیرنویس، تایم‌لپس\n"
+        "📄 <b>ابزار PDF</b> — ادغام، تقسیم، قفل\n"
+        "🎨 <b>جعبه خلاقیت</b> — رمز، ترجمه، TTS",
+        parse_mode='HTML',
+        reply_markup=main_menu_keyboard(user_id, page=2)
+    )
+
+
+@bot.message_handler(func=lambda m: m.text == '⬅️ صفحه ۱')
+def go_to_page_1(message):
+    user_id = message.from_user.id
+    set_state(user_id, menu_page=1)
+
+    bot.send_message(
+        message.chat.id,
+        "📄 <b>صفحه ۱</b>\n\n"
+        "🖼️ <b>تبدیل عکس</b> — فرمت، اندازه، افکت\n"
+        "📄 <b>استخراج متن</b> — OCR فارسی/انگلیسی\n"
+        "🗜️ <b>ساخت ZIP</b> — چند فایل → ZIP\n"
+        "🌐 <b>تحلیل سایت</b> — پینگ، SSL، IP\n"
+        "🌐 <b>ابزار شبکه</b> — WHOIS، DNS، پورت\n"
+        "💰 <b>ابزار مالی</b> — ارز، طلا، تاریخ\n"
+        "🛠 <b>ابزار متنی</b> — شمارش، Base64، ASCII\n"
+        "📱 <b>ساخت QR Code</b> — ۶ رنگ سفارشی",
+        parse_mode='HTML',
+        reply_markup=main_menu_keyboard(user_id, page=1)
     )
 
 
@@ -33,84 +75,48 @@ def help_handler(message):
         "📖 <b>راهنمای ربات</b>\n"
         "━━━━━━━━━━━━━━━\n\n"
 
+        "📄 <b>صفحه ۱:</b>\n\n"
+
         "🖼️ <b>تبدیل عکس</b>\n"
         "   • تبدیل فرمت: JPG / PNG / WEBP / PDF\n"
-        "   • تغییر اندازه (درصد یا پیکسل)\n"
-        "   • ۱۰ افکت (سیاه‌سفید، سپیا، بلور، ...)\n"
-        "   • واترمارک متنی\n\n"
+        "   • تغییر اندازه، افکت، واترمارک\n\n"
 
         "📄 <b>استخراج متن (OCR)</b>\n"
-        "   • متن رو از عکس بکش\n"
-        "   • فارسی + انگلیسی\n"
-        "   • پیش‌پردازش هوشمند\n\n"
+        "   • فارسی + انگلیسی\n\n"
 
         "🗜️ <b>ساخت ZIP</b>\n"
-        "   • چند فایل بفرست → یه ZIP بگیر\n\n"
+        "   • چند فایل → یه ZIP\n\n"
 
         "🌐 <b>تحلیل سایت</b>\n"
-        "   • 📡 پینگ سرور\n"
-        "   • 🔒 گواهی SSL + تاریخ انقضا\n"
-        "   • 🌍 موقعیت IP + ISP\n"
-        "   • 📊 وضعیت HTTP + زمان پاسخ\n\n"
+        "   • پینگ، SSL، IP، HTTP\n\n"
 
         "🌐 <b>ابزار شبکه</b>\n"
-        "   • 🔍 WHOIS — مالک دامنه، تاریخ ثبت\n"
-        "   • 📡 DNS — A، MX، NS، TXT\n"
-        "   • 🚪 اسکن پورت — پورت‌های باز\n"
-        "   • 🔒 SSL — گواهی و cipher\n"
-        "   • 📶 تست سرعت — سرعت دانلود\n\n"
+        "   • WHOIS، DNS، اسکن پورت، SSL، تست سرعت\n\n"
 
         "💰 <b>ابزار مالی</b>\n"
-        "   • 💵 ارز دیجیتال (BTC، ETH، ...)\n"
-        "   • 💱 نرخ ارز (دلاری و تومانی)\n"
-        "   • 🥇 طلا و سکه\n"
-        "   • 📅 تبدیل تاریخ (شمسی ↔ میلادی ↔ قمری)\n"
-        "   • 🧮 ماشین حساب\n\n"
+        "   • ارز دیجیتال، نرخ ارز، طلا، تاریخ، ماشین حساب\n\n"
 
         "🛠 <b>ابزار متنی</b>\n"
-        "   • 🔤 شمارش کلمات\n"
-        "   • 🔄 تبدیل حالت حروف\n"
-        "   • 🎭 استایل یونیکد\n"
-        "   • 🔁 Reverse\n"
-        "   • 🧹 پاک‌سازی متن\n"
-        "   • 📊 تحلیل متن\n"
-        "   • 🔐 Base64 (Encode / Decode)\n"
-        "   • 🔗 URL (Encode / Decode)\n"
-        "   • 🔢 تبدیل اعداد\n"
-        "   • 🎨 ASCII Art\n\n"
+        "   • شمارش، تبدیل، Base64، URL، ASCII Art\n\n"
 
         "📱 <b>ساخت QR Code</b>\n"
-        "   • لینک، متن، شماره، ایمیل → QR\n"
-        "   • 🎨 ۶ رنگ سفارشی\n\n"
+        "   • با ۶ رنگ سفارشی\n\n"
+
+        "━━━━━━━━━━━━━━━\n\n"
+
+        "📄 <b>صفحه ۲:</b>\n\n"
 
         "🎵 <b>مبدل مدیا</b>\n"
-        "   • 🎵 ویدیو → MP3\n"
-        "   • 🎬 ویدیو → GIF\n"
-        "   • 📼 تبدیل فرمت (MP4/WEBM/MKV/AVI/MOV)\n"
-        "   • 🎵 صوت → MP3/WAV/OGG/M4A\n"
-        "   • 🎚 تغییر سرعت (0.5x تا 3x)\n"
-        "   • 🎼 تغییر پیچ صدا\n"
-        "   • 📊 نرمالایز کردن\n"
-        "   • 🔄 برعکس کردن\n"
-        "   • ✂️ برش\n\n"
+        "   • MP3، GIF، فرمت، سرعت، پیچ، برش\n\n"
+
+        "🎬 <b>مدیا پیشرفته</b>\n"
+        "   • استخراج فریم، زیرنویس، تایم‌لپس\n\n"
 
         "📄 <b>ابزار PDF</b>\n"
-        "   • 🔗 ادغام چند PDF\n"
-        "   • ✂️ تقسیم PDF\n"
-        "   • 🔒 قفل / 🔓 باز کردن قفل\n"
-        "   • 📷 PDF → عکس\n"
-        "   • 📄 عکس → PDF\n"
-        "   • 📉 فشرده‌سازی\n"
-        "   • 🔄 چرخش\n"
-        "   • 💧 واترمارک\n"
-        "   • ℹ️ اطلاعات PDF\n\n"
+        "   • ادغام، تقسیم، قفل، عکس↔PDF، واترمارک\n\n"
 
         "🎨 <b>جعبه خلاقیت</b>\n"
-        "   • 🔐 تولید رمز قوی\n"
-        "   • 🌍 ترجمه (۱۰ زبان)\n"
-        "   • 🔊 متن → صوت (فارسی/انگلیسی)\n"
-        "   • 🎨 متن → عکس\n"
-        "   • 💧 واترمارک عکس\n\n"
+        "   • رمز قوی، ترجمه، TTS، متن→عکس\n\n"
 
         "━━━━━━━━━━━━━━━\n"
 

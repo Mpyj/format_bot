@@ -7,6 +7,7 @@ from . import network
 from . import finance
 from . import text_tools
 from . import media
+from . import advanced_media
 from . import pdf
 from . import creativity
 from . import admin
