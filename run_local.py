@@ -19,8 +19,8 @@ def main():
     cleanup_old_files()
 
     from handlers import (  # noqa
-        start, image, ocr, archive, site, media, pdf,
-        creativity, admin, middleware
+        start, image, ocr, archive, site, network,
+        media, pdf, creativity, admin, middleware
     )
 
     bot.remove_webhook()

@@ -9,6 +9,7 @@ def main_menu_keyboard(user_id: int = None):
         types.KeyboardButton('📄 استخراج متن'),
         types.KeyboardButton('🗜️ ساخت ZIP'),
         types.KeyboardButton('🌐 تحلیل سایت'),
+        types.KeyboardButton('🌐 ابزار شبکه'),
         types.KeyboardButton('📱 ساخت QR Code'),
         types.KeyboardButton('🎵 مبدل مدیا'),
         types.KeyboardButton('📄 ابزار PDF'),
@@ -20,6 +21,7 @@ def main_menu_keyboard(user_id: int = None):
         markup.add(types.KeyboardButton('👑 پنل ادمین'))
 
     return markup
+
 
 def zip_done_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)

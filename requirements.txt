@@ -16,3 +16,5 @@ reportlab
 gTTS
 deep-translator
 persian-speech
+python-whois
+dnspython

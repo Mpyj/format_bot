@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI):
 
     # ۳) ایمپورت هندلرها
     from handlers import (  # noqa
-        start, image, ocr, archive, site, media, pdf,
-        creativity, admin, middleware
+        start, image, ocr, archive, site, network,
+        media, pdf, creativity, admin, middleware
     )
 
     # ۴) ست کردن وبهوک
