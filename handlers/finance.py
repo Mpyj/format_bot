@@ -8,17 +8,16 @@ from utils.finance_tools import (
     convert_date, calculate, CRYPTO_NAMES, CURRENCY_NAMES,
 )
 from utils.keyboards import main_menu_keyboard
-from handlers.middleware import check_usage_limit, mark_user_used
+from handlers.middleware import mark_user_used
 
 logger = logging.getLogger(__name__)
 
 
-# ---------- شروع (بدون محدودیت) ----------
-@bot.message_handler(func=lambda m: m.text == '💰 ابزار مالی')
-def finance_start(message):
-    user_id = message.from_user.id
-    set_state(user_id, mode="finance", waiting_for=None)
-
+# ============================================================
+# 🏠 منوی اصلی ابزار مالی
+# ============================================================
+def _main_finance_menu(user_id: int = None):
+    """منوی اصلی ابزار مالی"""
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("💵 ارز دیجیتال", callback_data="fin_op_crypto"),
@@ -31,7 +30,22 @@ def finance_start(message):
     markup.add(
         types.InlineKeyboardButton("🧮 ماشین حساب", callback_data="fin_op_calc"),
     )
-    markup.add(types.InlineKeyboardButton("❌ انصراف", callback_data="fin_op_cancel"))
+    markup.add(types.InlineKeyboardButton("❌ بستن", callback_data="fin_op_close"))
+    return markup
+
+
+def _back_button_markup(callback_data: str = "fin_back"):
+    """دکمه بازگشت"""
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data=callback_data))
+    return markup
+
+
+# ---------- شروع (بدون محدودیت) ----------
+@bot.message_handler(func=lambda m: m.text == '💰 ابزار مالی')
+def finance_start(message):
+    user_id = message.from_user.id
+    set_state(user_id, mode="finance", waiting_for=None)
 
     bot.send_message(
         message.chat.id,
@@ -42,24 +56,58 @@ def finance_start(message):
         "📅 <b>تبدیل تاریخ</b> — شمسی ↔ میلادی ↔ قمری\n"
         "🧮 <b>ماشین حساب</b> — محاسبات ریاضی",
         parse_mode='HTML',
-        reply_markup=markup
+        reply_markup=_main_finance_menu(user_id)
     )
 
 
-# ---------- انتخاب عملیات ----------
+# ============================================================
+# 🔙 بازگشت به منوی اصلی ابزار مالی
+# ============================================================
+@bot.callback_query_handler(func=lambda c: c.data == "fin_back")
+def finance_back(call):
+    user_id = call.from_user.id
+    set_state(user_id, waiting_for=None)
+
+    bot.answer_callback_query(call.id)
+    try:
+        bot.edit_message_text(
+            "💰 <b>ابزار مالی</b>\n\n"
+            "💵 <b>ارز دیجیتال</b> — BTC، ETH، USDT و ...\n"
+            "💱 <b>نرخ ارز</b> — دلار، یورو، پوند (دلاری و تومانی)\n"
+            "🥇 <b>طلا و سکه</b> — طلای ۱۸ عیار، سکه امامی\n"
+            "📅 <b>تبدیل تاریخ</b> — شمسی ↔ میلادی ↔ قمری\n"
+            "🧮 <b>ماشین حساب</b> — محاسبات ریاضی",
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML', reply_markup=_main_finance_menu(user_id)
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id,
+            "💰 <b>ابزار مالی</b>",
+            parse_mode='HTML', reply_markup=_main_finance_menu(user_id)
+        )
+
+
+# ============================================================
+# انتخاب عملیات
+# ============================================================
 @bot.callback_query_handler(func=lambda c: c.data.startswith("fin_op_"))
 def finance_action(call):
     user_id = call.from_user.id
     action = call.data.replace("fin_op_", "")
 
-    if action == "cancel":
+    if action == "close":
         clear_state(user_id)
-        bot.answer_callback_query(call.id, "لغو شد")
-        bot.edit_message_text(
-            "❌ عملیات لغو شد.",
-            call.message.chat.id, call.message.message_id
+        bot.answer_callback_query(call.id, "بسته شد")
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except Exception:
+            pass
+        bot.send_message(
+            call.message.chat.id,
+            "منوی اصلی:",
+            reply_markup=main_menu_keyboard(user_id)
         )
-        bot.send_message(call.message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
         return
 
     bot.answer_callback_query(call.id)
@@ -80,15 +128,13 @@ def finance_action(call):
                 "• <code>1403/06/15</code> (شمسی)\n"
                 "• <code>2024-09-05</code> (میلادی)",
                 call.message.chat.id, call.message.message_id,
-                parse_mode='HTML'
+                parse_mode='HTML', reply_markup=_back_button_markup()
             )
         except Exception:
             bot.send_message(
                 call.message.chat.id,
-                "📅 <b>تبدیل تاریخ</b>\n\n"
-                "تاریخ رو بفرست:\n\n"
-                "💡 مثال: <code>1403/06/15</code>",
-                parse_mode='HTML'
+                "📅 <b>تبدیل تاریخ</b>\n\nتاریخ رو بفرست:",
+                parse_mode='HTML', reply_markup=_back_button_markup()
             )
     elif action == "calc":
         set_state(user_id, waiting_for="fin_calc")
@@ -98,15 +144,13 @@ def finance_action(call):
                 "عبارت ریاضی رو بفرست:\n\n"
                 "💡 مثال: <code>25 * 4 + 100</code>",
                 call.message.chat.id, call.message.message_id,
-                parse_mode='HTML'
+                parse_mode='HTML', reply_markup=_back_button_markup()
             )
         except Exception:
             bot.send_message(
                 call.message.chat.id,
-                "🧮 <b>ماشین حساب</b>\n\n"
-                "عبارت ریاضی رو بفرست:\n\n"
-                "💡 مثال: <code>25 * 4 + 100</code>",
-                parse_mode='HTML'
+                "🧮 <b>ماشین حساب</b>\n\nعبارت ریاضی رو بفرست:",
+                parse_mode='HTML', reply_markup=_back_button_markup()
             )
 
 
@@ -122,6 +166,7 @@ def _crypto_menu(call, user_id: int):
         for sym, (_, name, _) in CRYPTO_NAMES.items()
     ]
     markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="fin_back"))
 
     try:
         bot.edit_message_text(
@@ -150,7 +195,8 @@ def crypto_chosen(call):
         try:
             bot.edit_message_text(
                 f"❌ خطا: {info.get('error', 'ناشناخته')}",
-                call.message.chat.id, call.message.message_id
+                call.message.chat.id, call.message.message_id,
+                reply_markup=_back_button_markup("fin_back_crypto")
             )
         except Exception:
             bot.send_message(
@@ -189,12 +235,21 @@ def crypto_chosen(call):
         bot.edit_message_text(
             text,
             call.message.chat.id, call.message.message_id,
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=_back_button_markup("fin_back_crypto")
         )
     except Exception:
         bot.send_message(call.message.chat.id, text, parse_mode='HTML')
 
     mark_user_used(user_id)
+
+
+@bot.callback_query_handler(func=lambda c: c.data == "fin_back_crypto")
+def back_to_crypto(call):
+    """برگشت به منوی ارز دیجیتال"""
+    user_id = call.from_user.id
+    bot.answer_callback_query(call.id)
+    _crypto_menu(call, user_id)
 
 
 # ============================================================
@@ -208,6 +263,8 @@ def _rates_menu(call, user_id: int):
         types.InlineKeyboardButton("🌍 بر اساس دلار", callback_data="ratesbase_usd"),
         types.InlineKeyboardButton("🇮🇷 بر اساس تومان", callback_data="ratesbase_irr"),
     )
+    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="fin_back"))
+
     try:
         bot.edit_message_text(
             "💱 <b>نرخ ارز</b>\n\nنرخ‌ها رو بر اساس چی می‌خوای؟",
@@ -242,7 +299,8 @@ def _show_rates_usd(call, user_id: int):
         try:
             bot.edit_message_text(
                 f"❌ خطا: {info.get('error', 'ناشناخته')}",
-                call.message.chat.id, call.message.message_id
+                call.message.chat.id, call.message.message_id,
+                reply_markup=_back_button_markup("fin_back_rates")
             )
         except Exception:
             bot.send_message(
@@ -265,7 +323,8 @@ def _show_rates_usd(call, user_id: int):
         bot.edit_message_text(
             text,
             call.message.chat.id, call.message.message_id,
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=_back_button_markup("fin_back_rates")
         )
     except Exception:
         bot.send_message(call.message.chat.id, text, parse_mode='HTML')
@@ -281,7 +340,8 @@ def _show_rates_irr(call, user_id: int):
                 "❌ خطا در دریافت نرخ دلار.\n"
                 "سرورهای ایرانی موقتاً در دسترس نیستن.\n\n"
                 "💡 دوباره تلاش کن.",
-                call.message.chat.id, call.message.message_id
+                call.message.chat.id, call.message.message_id,
+                reply_markup=_back_button_markup("fin_back_rates")
             )
         except Exception:
             bot.send_message(
@@ -295,7 +355,8 @@ def _show_rates_irr(call, user_id: int):
         try:
             bot.edit_message_text(
                 "❌ نرخ دلار از سرور دریافت نشد. دوباره تلاش کن.",
-                call.message.chat.id, call.message.message_id
+                call.message.chat.id, call.message.message_id,
+                reply_markup=_back_button_markup("fin_back_rates")
             )
         except Exception:
             bot.send_message(
@@ -309,12 +370,13 @@ def _show_rates_irr(call, user_id: int):
         try:
             bot.edit_message_text(
                 f"❌ خطا در دریافت نرخ جهانی: {global_info.get('error', 'ناشناخته')}",
-                call.message.chat.id, call.message.message_id
+                call.message.chat.id, call.message.message_id,
+                reply_markup=_back_button_markup("fin_back_rates")
             )
         except Exception:
             bot.send_message(
                 call.message.chat.id,
-                f"❌ خطا در نرخ جهانی"
+                "❌ خطا در نرخ جهانی"
             )
         return
 
@@ -339,12 +401,20 @@ def _show_rates_irr(call, user_id: int):
         bot.edit_message_text(
             text,
             call.message.chat.id, call.message.message_id,
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=_back_button_markup("fin_back_rates")
         )
     except Exception:
         bot.send_message(call.message.chat.id, text, parse_mode='HTML')
 
     mark_user_used(user_id)
+
+
+@bot.callback_query_handler(func=lambda c: c.data == "fin_back_rates")
+def back_to_rates(call):
+    user_id = call.from_user.id
+    bot.answer_callback_query(call.id)
+    _rates_menu(call, user_id)
 
 
 # ============================================================
@@ -360,7 +430,8 @@ def _show_iran(call, user_id: int):
             bot.edit_message_text(
                 f"❌ خطا: {info.get('error', 'ناشناخته')}\n\n"
                 f"سرورهای ایرانی موقتاً در دسترس نیستن. دوباره تلاش کن.",
-                call.message.chat.id, call.message.message_id
+                call.message.chat.id, call.message.message_id,
+                reply_markup=_back_button_markup()
             )
         except Exception:
             bot.send_message(
@@ -384,7 +455,8 @@ def _show_iran(call, user_id: int):
         bot.edit_message_text(
             text,
             call.message.chat.id, call.message.message_id,
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=_back_button_markup()
         )
     except Exception:
         bot.send_message(call.message.chat.id, text, parse_mode='HTML')
