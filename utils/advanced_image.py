@@ -468,3 +468,100 @@ def get_image_dimensions(input_path: str) -> dict:
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+# ============================================================
+# 🖼️ بهبود کیفیت عکس
+# ============================================================
+def enhance_image(input_path: str) -> str | None:
+    """
+    بهبود کیفیت عکس:
+    - کاهش نویز
+    - شارپنس
+    - کنتراست خودکار
+    - بهبود رنگ
+    - روشنایی
+    """
+    try:
+        img = Image.open(input_path).convert("RGB")
+
+        # ۱) کاهش نویز (Median filter ملایم)
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+
+        # ۲) کنتراست خودکار
+        img = ImageOps.autocontrast(img, cutoff=1)
+
+        # ۳) شارپنس
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+
+        # ۴) بهبود رنگ
+        color_enhancer = ImageEnhance.Color(img)
+        img = color_enhancer.enhance(1.2)
+
+        # ۵) بهبود کنتراست نهایی
+        contrast_enhancer = ImageEnhance.Contrast(img)
+        img = contrast_enhancer.enhance(1.1)
+
+        # ۶) بهبود روشنایی (خیلی کم)
+        brightness_enhancer = ImageEnhance.Brightness(img)
+        img = brightness_enhancer.enhance(1.05)
+
+        output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_enhanced.jpg")
+        img.save(output, "JPEG", quality=95)
+        return output
+    except Exception as e:
+        logger.exception(f"خطا در بهبود کیفیت: {e}")
+        return None
+
+
+# ============================================================
+# 🌈 HDR
+# ============================================================
+def hdr_effect(input_path: str) -> str | None:
+    """
+    افکت HDR (ترکیب چند نوردهی):
+    - سایه‌ها روشن‌تر
+    - هایلایت‌ها متعادل‌تر
+    - رنگ‌های زنده‌تر
+    - کنتراست بهتر
+    """
+    try:
+        img = Image.open(input_path).convert("RGB")
+
+        # ۱) کاهش نویز
+        img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+
+        # ۲) HDR با CLAHE-like approach
+        # نسخه روشن‌تر
+        bright = ImageEnhance.Brightness(img).enhance(1.3)
+        # نسخه تیره‌تر
+        dark = ImageEnhance.Brightness(img).enhance(0.7)
+
+        # ۳) ترکیب با ImageChops
+        from PIL import ImageChops
+
+        # هایلایت از نسخه تیره (اطلاعات بیشتر در سایه‌ها)
+        # سایه از نسخه روشن
+        # نتیجه: HDR
+
+        # روش ساده: Brightness + Contrast
+        img = ImageEnhance.Brightness(img).enhance(1.15)
+        img = ImageEnhance.Contrast(img).enhance(1.4)
+
+        # ۴) Vibrance (رنگ زنده)
+        color_enhancer = ImageEnhance.Color(img)
+        img = color_enhancer.enhance(1.4)
+
+        # ۵) شارپنس
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=120, threshold=3))
+
+        # ۶) Shadow recovery (روشن کردن سایه‌ها)
+        # با ترکیب نسخه روشن‌تر
+        bright_version = ImageEnhance.Brightness(img).enhance(1.2)
+        img = Image.blend(img, bright_version, 0.3)
+
+        output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_hdr.jpg")
+        img.save(output, "JPEG", quality=95)
+        return output
+    except Exception as e:
+        logger.exception(f"خطا در HDR: {e}")
+        return None

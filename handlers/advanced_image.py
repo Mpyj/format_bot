@@ -10,8 +10,9 @@ from utils.states import set_state, get_state, clear_state, is_menu_button
 from utils.file_info import human_size
 from utils.advanced_image import (
     get_color_palette, generate_palette_image, get_color_history,
-    auto_rotate, zoom_image, make_collage, add_frame,
+    auto_rotate, make_collage, add_frame,
     smart_crop, artistic_effect, images_to_gif, get_image_dimensions,
+    enhance_image, hdr_effect,
 )
 from utils.keyboards import main_menu_keyboard
 from handlers.middleware import mark_user_used
@@ -32,7 +33,10 @@ def _adv_image_menu(user_id: int = None, page: int = 1):
         )
         markup.add(
             types.InlineKeyboardButton("📐 چرخش خودکار", callback_data="advimg_rotate"),
-            types.InlineKeyboardButton("🔍 بزرگ‌نمایی", callback_data="advimg_zoom"),
+            types.InlineKeyboardButton("🖼️ بهبود کیفیت", callback_data="advimg_enhance"),
+        )
+        markup.add(
+            types.InlineKeyboardButton("🌈 HDR", callback_data="advimg_hdr"),
         )
         markup.add(
             types.InlineKeyboardButton("بعدی ➡️", callback_data="advimg_page_2"),
@@ -65,7 +69,8 @@ def _menu_text(page: int) -> str:
             "🎨 <b>پالت رنگ</b> — ۵ رنگ غالب\n"
             "📊 <b>تاریخچه رنگ</b> — تحلیل رنگ‌ها\n"
             "📐 <b>چرخش خودکار</b> — بر اساس EXIF\n"
-            "🔍 <b>بزرگ‌نمایی</b> — ۲x، ۴x بدون افت"
+            "🖼️ <b>بهبود کیفیت</b> — شارپ، کنتراست، رنگ\n"
+            "🌈 <b>HDR</b> — رنگ زنده، سایه روشن"
         )
     return (
         "🎨 <b>تصویر پیشرفته — صفحه ۲/۲</b>\n"
@@ -167,7 +172,7 @@ def adv_image_action(call):
 
     bot.answer_callback_query(call.id)
 
-    # کولاژ و GIF حالت خاص دارن
+    # کولاژ و GIF
     if action == "collage":
         set_state(user_id, mode="adv_image", advimg_action="collage",
                   waiting_for="advimg_collage", advimg_files=[])
@@ -222,59 +227,20 @@ def adv_image_action(call):
             )
         return
 
-    if action == "zoom":
-        set_state(user_id, mode="adv_image", advimg_action="zoom", waiting_for="advimg_zoom")
-        try:
-            bot.edit_message_text(
-                "🔍 <b>بزرگ‌نمایی</b>\n\nعکس رو بفرست:",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=_back_markup()
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "🔍 عکس رو بفرست:", parse_mode='HTML', reply_markup=_back_markup())
-        return
-
-    if action == "frame":
-        set_state(user_id, mode="adv_image", advimg_action="frame", waiting_for="advimg_frame")
-        try:
-            bot.edit_message_text(
-                "🖼️ <b>افزودن فریم</b>\n\nعکس رو بفرست:",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=_back_markup()
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "🖼️ عکس رو بفرست:", parse_mode='HTML', reply_markup=_back_markup())
-        return
-
-    if action == "art":
-        set_state(user_id, mode="adv_image", advimg_action="art", waiting_for="advimg_art")
-        try:
-            bot.edit_message_text(
-                "🎭 <b>افکت هنری</b>\n\nعکس رو بفرست:",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=_back_markup()
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "🎭 عکس رو بفرست:", parse_mode='HTML', reply_markup=_back_markup())
-        return
-
-    if action == "crop":
-        set_state(user_id, mode="adv_image", advimg_action="crop", waiting_for="advimg_crop")
-        try:
-            bot.edit_message_text(
-                "✂️ <b>برش هوشمند</b>\n\nعکس رو بفرست:",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=_back_markup()
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "✂️ عکس رو بفرست:", parse_mode='HTML', reply_markup=_back_markup())
-        return
-
     # راهنماهای ساده
     hints = {
         "palette": "🎨 <b>پالت رنگ</b>\n\nعکس رو بفرست:",
         "history": "📊 <b>تاریخچه رنگ</b>\n\nعکس رو بفرست:",
         "rotate": "📐 <b>چرخش خودکار</b>\n\nعکس رو بفرست:",
+        "enhance": "🖼️ <b>بهبود کیفیت</b>\n\n"
+                   "عکس رو بفرست تا کیفیتش رو بهتر کنم:\n\n"
+                   "• کاهش نویز\n• شارپنس\n• کنتراست خودکار\n• بهبود رنگ",
+        "hdr": "🌈 <b>HDR</b>\n\n"
+               "عکس رو بفرست تا افکت HDR اعمال کنم:\n\n"
+               "• رنگ‌های زنده\n• سایه‌های روشن\n• کنتراست بهتر",
+        "frame": "🖼️ <b>افزودن فریم</b>\n\nعکس رو بفرست:",
+        "art": "🎭 <b>افکت هنری</b>\n\nعکس رو بفرست:",
+        "crop": "✂️ <b>برش هوشمند</b>\n\nعکس رو بفرست:",
     }
 
     set_state(user_id, mode="adv_image", advimg_action=action, waiting_for=f"advimg_{action}")
@@ -302,7 +268,6 @@ def adv_image_action(call):
         and get_state(m.from_user.id).get("waiting_for") not in (
             "advimg_collage",
             "advimg_gif",
-            "advimg_zoom_choice",
             "advimg_frame_color",
             "advimg_art_choice",
             "advimg_crop_choice",
@@ -335,15 +300,10 @@ def adv_image_receive(message):
             _process_history(message, user_id, path)
         elif action == "rotate":
             _process_rotate(message, user_id, path)
-        elif action == "zoom":
-            set_state(user_id, waiting_for="advimg_zoom_choice")
-            markup = types.InlineKeyboardMarkup(row_width=3)
-            markup.add(
-                types.InlineKeyboardButton("2x", callback_data="zoom_2"),
-                types.InlineKeyboardButton("3x", callback_data="zoom_3"),
-                types.InlineKeyboardButton("4x", callback_data="zoom_4"),
-            )
-            bot.send_message(message.chat.id, "🔍 ضریب بزرگ‌نمایی:", reply_markup=markup)
+        elif action == "enhance":
+            _process_enhance(message, user_id, path)
+        elif action == "hdr":
+            _process_hdr(message, user_id, path)
         elif action == "frame":
             set_state(user_id, waiting_for="advimg_frame_color")
             markup = types.InlineKeyboardMarkup(row_width=3)
@@ -466,77 +426,68 @@ def _process_rotate(message, user_id: int, path: str):
 
 
 # ============================================================
-# 🔍 بزرگ‌نمایی
+# 🖼️ بهبود کیفیت
 # ============================================================
-@bot.callback_query_handler(func=lambda c: c.data.startswith("zoom_"))
-def zoom_chosen(call):
-    user_id = call.from_user.id
-    state = get_state(user_id)
-    path = state.get("advimg_input_path")
-    factor = int(call.data.replace("zoom_", ""))
-
-    if not path or not os.path.exists(path):
-        bot.answer_callback_query(call.id, "عکس پیدا نشد", show_alert=True)
-        clear_state(user_id)
-        return
-
-    bot.answer_callback_query(call.id, f"({factor}x)")
-
-    # ابعاد اصلی
-    dims_before = get_image_dimensions(path)
-    if not dims_before.get("success"):
-        bot.send_message(call.message.chat.id, "❌ خطا در خوندن عکس.")
-        delete_file(path)
-        clear_state(user_id)
-        return
-
-    w_before = dims_before["width"]
-    h_before = dims_before["height"]
-
-    bot.edit_message_text(
-        f"⏳ در حال بزرگ‌نمایی ({factor}x)...\n\n"
-        f"📐 ابعاد اصلی: {w_before} × {h_before}",
-        call.message.chat.id, call.message.message_id
-    )
-
-    output = zoom_image(path, factor)
+def _process_enhance(message, user_id: int, path: str):
+    bot.send_message(message.chat.id, "⏳ در حال بهبود کیفیت... (چند ثانیه)")
+    output = enhance_image(path)
 
     if output and os.path.exists(output):
-        # ابعاد جدید
-        dims_after = get_image_dimensions(output)
-        w_after = dims_after.get("width", "?")
-        h_after = dims_after.get("height", "?")
         size = os.path.getsize(output)
-        size_kb = size / 1024
-
-        caption = (
-            f"🔍 <b>بزرگ‌نمایی {factor}x</b>\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"📐 <b>قبل:</b> {w_before} × {h_before}\n"
-            f"📐 <b>بعد:</b> {w_after} × {h_after}\n"
-            f"📊 <b>حجم:</b> {size_kb:.1f} KB\n\n"
-            f"💡 <i>عکس بزرگ‌تره، ولی تلگرام همون اندازه نشون میده.\n"
-            f"برای دیدن تفاوت، فایل رو دانلود کن.</i>"
-        )
-
         with open(output, "rb") as f:
             bot.send_document(
-                call.message.chat.id, f,
-                caption=caption,
+                message.chat.id, f,
+                caption=(
+                    f"🖼️ <b>کیفیت بهبود یافت</b>\n"
+                    f"━━━━━━━━━━━━━━━\n\n"
+                    f"✅ کاهش نویز\n"
+                    f"✅ شارپنس\n"
+                    f"✅ کنتراست خودکار\n"
+                    f"✅ بهبود رنگ\n\n"
+                    f"📊 حجم: {human_size(size)}"
+                ),
                 parse_mode='HTML'
             )
         delete_file(output)
         mark_user_used(user_id)
     else:
-        bot.send_message(
-            call.message.chat.id,
-            "❌ ناموفق بود.\n\n"
-            "💡 ممکنه عکس خیلی بزرگ بشه و از حد مجاز رد بشه."
-        )
+        bot.send_message(message.chat.id, "❌ ناموفق بود.")
 
     delete_file(path)
     clear_state(user_id)
-    bot.send_message(call.message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
+    bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
+
+
+# ============================================================
+# 🌈 HDR
+# ============================================================
+def _process_hdr(message, user_id: int, path: str):
+    bot.send_message(message.chat.id, "⏳ در حال اعمال HDR... (چند ثانیه)")
+    output = hdr_effect(path)
+
+    if output and os.path.exists(output):
+        size = os.path.getsize(output)
+        with open(output, "rb") as f:
+            bot.send_document(
+                message.chat.id, f,
+                caption=(
+                    f"🌈 <b>HDR اعمال شد</b>\n"
+                    f"━━━━━━━━━━━━━━━\n\n"
+                    f"✅ رنگ‌های زنده\n"
+                    f"✅ سایه‌های روشن\n"
+                    f"✅ کنتراست بهتر\n\n"
+                    f"📊 حجم: {human_size(size)}"
+                ),
+                parse_mode='HTML'
+            )
+        delete_file(output)
+        mark_user_used(user_id)
+    else:
+        bot.send_message(message.chat.id, "❌ ناموفق بود.")
+
+    delete_file(path)
+    clear_state(user_id)
+    bot.send_message(message.chat.id, "منوی اصلی:", reply_markup=main_menu_keyboard(user_id))
 
 
 # ============================================================
