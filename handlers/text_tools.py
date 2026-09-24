@@ -14,11 +14,14 @@ from utils.keyboards import main_menu_keyboard
 logger = logging.getLogger(__name__)
 
 
+def _esc(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 # ============================================================
 # 🏠 منوهای صفحه‌بندی شده
 # ============================================================
 def _menu_page(user_id: int, page: int = 1):
-    """منوی صفحه‌بندی شده ابزار متنی"""
     if page == 1:
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -73,8 +76,8 @@ def _menu_text(page: int) -> str:
         "━━━━━━━━━━━━━━━\n\n"
         "🧹 <b>پاک‌سازی</b> — حذف فاصله و کاراکتر اضافه\n"
         "📊 <b>تحلیل متن</b> — پربسامدترین کلمات\n"
-        "🔐 <b>Base64</b> — Encode / Decode\n"
-        "🔗 <b>URL</b> — Encode / Decode\n"
+        "🔐 <b>Base64</b> — Encode / Decode (جدا)\n"
+        "🔗 <b>URL</b> — Encode / Decode (جدا)\n"
         "🔢 <b>تبدیل اعداد</b> — دهدهی، باینری، هگز\n"
         "🎨 <b>ASCII Art</b> — متن به هنر اسکی"
     )
@@ -162,7 +165,59 @@ def text_action(call):
 
     bot.answer_callback_query(call.id)
 
-    # راهنماها
+    # 👇 Base64 زیرمنو
+    if action == "base64":
+        set_state(user_id, text_action="base64", waiting_for=None)
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("🔒 Encode", callback_data="b64_encode"),
+            types.InlineKeyboardButton("🔓 Decode", callback_data="b64_decode"),
+        )
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back"))
+        try:
+            bot.edit_message_text(
+                "🔐 <b>Base64</b>\n\n"
+                "کدوم عملیات؟\n\n"
+                "🔒 <b>Encode</b> — متن → Base64\n"
+                "🔓 <b>Decode</b> — Base64 → متن",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=markup
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "🔐 <b>Base64</b>\n\nکدوم عملیات؟",
+                parse_mode='HTML', reply_markup=markup
+            )
+        return
+
+    # 👇 URL زیرمنو
+    if action == "url":
+        set_state(user_id, text_action="url", waiting_for=None)
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("🔒 Encode", callback_data="url_encode"),
+            types.InlineKeyboardButton("🔓 Decode", callback_data="url_decode"),
+        )
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back"))
+        try:
+            bot.edit_message_text(
+                "🔗 <b>URL</b>\n\n"
+                "کدوم عملیات؟\n\n"
+                "🔒 <b>Encode</b> — متن → URL-encoded\n"
+                "🔓 <b>Decode</b> — URL-encoded → متن",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=markup
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "🔗 <b>URL</b>\n\nکدوم عملیات؟",
+                parse_mode='HTML', reply_markup=markup
+            )
+        return
+
+    # بقیه عملیات‌ها
     hints = {
         "count": "🔤 <b>شمارش کلمات</b>\n\nمتن رو بفرست:",
         "case": "🔄 <b>تبدیل حروف</b>\n\nمتن رو بفرست:",
@@ -170,8 +225,6 @@ def text_action(call):
         "reverse": "🔁 <b>Reverse</b>\n\nمتن رو بفرست:",
         "clean": "🧹 <b>پاک‌سازی متن</b>\n\nمتن رو بفرست:",
         "analyze": "📊 <b>تحلیل متن</b>\n\nمتن رو بفرست:",
-        "base64": "🔐 <b>Base64</b>\n\nمتن رو بفرست:",
-        "url": "🔗 <b>URL Encode/Decode</b>\n\nمتن یا URL رو بفرست:",
         "number": "🔢 <b>تبدیل اعداد</b>\n\nیه عدد بفرست (دهدهی):\nمثال: <code>255</code>",
         "ascii": "🎨 <b>ASCII Art</b>\n\nیه متن انگلیسی بفرست:",
     }
@@ -191,6 +244,75 @@ def text_action(call):
         bot.send_message(
             call.message.chat.id,
             hints.get(action, "عملیات نامشخص"),
+            parse_mode='HTML',
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back")
+            )
+        )
+
+
+# ============================================================
+# Base64 / URL — انتخاب Encode/Decode
+# ============================================================
+@bot.callback_query_handler(func=lambda c: c.data in ["b64_encode", "b64_decode"])
+def b64_mode_chosen(call):
+    user_id = call.from_user.id
+    mode = call.data.replace("b64_", "")
+
+    bot.answer_callback_query(call.id)
+
+    if mode == "encode":
+        set_state(user_id, text_action="base64_enc", waiting_for="txt_base64_enc")
+        text = "🔒 <b>Base64 Encode</b>\n\nمتن رو بفرست تا Encode کنم:"
+    else:
+        set_state(user_id, text_action="base64_dec", waiting_for="txt_base64_dec")
+        text = "🔓 <b>Base64 Decode</b>\n\nمتن Base64 رو بفرست تا Decode کنم:"
+
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML',
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back")
+            )
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id, text,
+            parse_mode='HTML',
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back")
+            )
+        )
+
+
+@bot.callback_query_handler(func=lambda c: c.data in ["url_encode", "url_decode"])
+def url_mode_chosen(call):
+    user_id = call.from_user.id
+    mode = call.data.replace("url_", "")
+
+    bot.answer_callback_query(call.id)
+
+    if mode == "encode":
+        set_state(user_id, text_action="url_enc", waiting_for="txt_url_enc")
+        text = "🔒 <b>URL Encode</b>\n\nمتن/لینک رو بفرست تا Encode کنم:"
+    else:
+        set_state(user_id, text_action="url_dec", waiting_for="txt_url_dec")
+        text = "🔓 <b>URL Decode</b>\n\nمتن URL-encoded رو بفرست تا Decode کنم:"
+
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML',
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back")
+            )
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id, text,
             parse_mode='HTML',
             reply_markup=types.InlineKeyboardMarkup().add(
                 types.InlineKeyboardButton("🔙 بازگشت", callback_data="txt_back")
@@ -224,10 +346,14 @@ def text_receive(message):
         _handle_clean(message, text)
     elif action == "analyze":
         _handle_analyze(message, text)
-    elif action == "base64":
-        _handle_base64(message, text)
-    elif action == "url":
-        _handle_url(message, text)
+    elif action == "base64_enc":
+        _handle_base64_encode(message, text)
+    elif action == "base64_dec":
+        _handle_base64_decode(message, text)
+    elif action == "url_enc":
+        _handle_url_encode(message, text)
+    elif action == "url_dec":
+        _handle_url_decode(message, text)
     elif action == "number":
         _handle_number(message, text)
     elif action == "ascii":
@@ -240,7 +366,7 @@ def text_receive(message):
 
 
 # ============================================================
-# هندلرهای اختصاصی
+# هندلرها
 # ============================================================
 def _handle_count(message, text: str):
     info = count_text(text)
@@ -270,25 +396,21 @@ def _handle_case(message, text: str):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
         return
 
-    # escape
-    def esc(s):
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
     result = (
         f"🔄 <b>حالت‌های مختلف</b>\n"
         f"━━━━━━━━━━━━━━━\n\n"
-        f"<b>UPPER:</b>\n<code>{esc(info['upper'])}</code>\n\n"
-        f"<b>lower:</b>\n<code>{esc(info['lower'])}</code>\n\n"
-        f"<b>Title:</b>\n<code>{esc(info['title'])}</code>\n\n"
-        f"<b>Sentence:</b>\n<code>{esc(info['sentence'])}</code>\n\n"
-        f"<b>aLtErNaTiNg:</b>\n<code>{esc(info['alternate'])}</code>\n\n"
-        f"<b>iNVERSE:</b>\n<code>{esc(info['inverse'])}</code>"
+        f"<b>UPPER:</b>\n<code>{_esc(info['upper'])}</code>\n\n"
+        f"<b>lower:</b>\n<code>{_esc(info['lower'])}</code>\n\n"
+        f"<b>Title:</b>\n<code>{_esc(info['title'])}</code>\n\n"
+        f"<b>Sentence:</b>\n<code>{_esc(info['sentence'])}</code>\n\n"
+        f"<b>aLtErNaTiNg:</b>\n<code>{_esc(info['alternate'])}</code>\n\n"
+        f"<b>iNVERSE:</b>\n<code>{_esc(info['inverse'])}</code>"
     )
     bot.send_message(message.chat.id, result, parse_mode='HTML')
 
 
 def _handle_unicode(message, text: str):
-    info = unicode_styles(text[:50])  # محدود به ۵۰ کاراکتر
+    info = unicode_styles(text[:50])
     if not info.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
         return
@@ -311,15 +433,12 @@ def _handle_reverse(message, text: str):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
         return
 
-    def esc(s):
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
     result = (
         f"🔁 <b>Reverse</b>\n"
         f"━━━━━━━━━━━━━━━\n\n"
-        f"<b>کل متن برعکس:</b>\n<code>{esc(info['reversed'])}</code>\n\n"
-        f"<b>ترتیب کلمات برعکس:</b>\n<code>{esc(info['reversed_words'])}</code>\n\n"
-        f"<b>هر کلمه برعکس:</b>\n<code>{esc(info['each_word_reversed'])}</code>"
+        f"<b>کل متن برعکس:</b>\n<code>{_esc(info['reversed'])}</code>\n\n"
+        f"<b>ترتیب کلمات برعکس:</b>\n<code>{_esc(info['reversed_words'])}</code>\n\n"
+        f"<b>هر کلمه برعکس:</b>\n<code>{_esc(info['each_word_reversed'])}</code>"
     )
     bot.send_message(message.chat.id, result, parse_mode='HTML')
 
@@ -330,10 +449,6 @@ def _handle_clean(message, text: str):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
         return
 
-    def esc(s):
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    # فقط ۲۰۰ کاراکتر اول هر کدوم
     def short(s):
         s = s[:200]
         return s + "..." if len(s) == 200 else s
@@ -341,11 +456,11 @@ def _handle_clean(message, text: str):
     result = (
         f"🧹 <b>پاک‌سازی متن</b>\n"
         f"━━━━━━━━━━━━━━━\n\n"
-        f"<b>حذف فاصله اضافه:</b>\n<code>{esc(short(info['no_extra_space']))}</code>\n\n"
-        f"<b>حذف خط خالی:</b>\n<code>{esc(short(info['no_empty_lines']))}</code>\n\n"
-        f"<b>فقط حروف:</b>\n<code>{esc(short(info['only_letters']))}</code>\n\n"
-        f"<b>حذف اعداد:</b>\n<code>{esc(short(info['no_numbers']))}</code>\n\n"
-        f"<b>حذف ایموجی:</b>\n<code>{esc(short(info['no_emoji']))}</code>"
+        f"<b>حذف فاصله اضافه:</b>\n<code>{_esc(short(info['no_extra_space']))}</code>\n\n"
+        f"<b>حذف خط خالی:</b>\n<code>{_esc(short(info['no_empty_lines']))}</code>\n\n"
+        f"<b>فقط حروف:</b>\n<code>{_esc(short(info['only_letters']))}</code>\n\n"
+        f"<b>حذف اعداد:</b>\n<code>{_esc(short(info['no_numbers']))}</code>\n\n"
+        f"<b>حذف ایموجی:</b>\n<code>{_esc(short(info['no_emoji']))}</code>"
     )
     bot.send_message(message.chat.id, result, parse_mode='HTML')
 
@@ -367,52 +482,72 @@ def _handle_analyze(message, text: str):
     medals = ["🥇", "🥈", "🥉"]
     for i, (word, count) in enumerate(info["top_words"]):
         medal = medals[i] if i < 3 else f"{i+1}."
-        # escape
-        word_safe = word.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        result += f"{medal} <code>{word_safe}</code> — {count} بار\n"
+        result += f"{medal} <code>{_esc(word)}</code> — {count} بار\n"
 
     bot.send_message(message.chat.id, result, parse_mode='HTML')
 
 
-def _handle_base64(message, text: str):
-    # چک کن آیا Base64 معتبره
-    import re
-    is_b64 = bool(re.fullmatch(r"[A-Za-z0-9+/=\s]+", text)) and len(text) % 4 == 0 or text.endswith("=")
+def _handle_base64_encode(message, text: str):
+    info = base64_encode(text)
+    if not info.get("success"):
+        bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
+        return
 
-    result_text = "🔐 <b>Base64</b>\n━━━━━━━━━━━━━━━\n\n"
-
-    # Encode
-    enc = base64_encode(text)
-    if enc.get("success"):
-        result_text += f"<b>Encode:</b>\n<code>{enc['result']}</code>\n\n"
-
-    # Decode (فقط اگه شبیه Base64 باشه)
-    if is_b64:
-        dec = base64_decode(text)
-        if dec.get("success"):
-            dec_safe = dec["result"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            result_text += f"<b>Decode:</b>\n<code>{dec_safe}</code>"
-        else:
-            result_text += f"<b>Decode:</b> ❌ {dec.get('error')}"
-    else:
-        result_text += "<b>Decode:</b> (متن Base64 نیست)"
-
-    bot.send_message(message.chat.id, result_text, parse_mode='HTML')
+    result = (
+        f"🔒 <b>Base64 Encode</b>\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"📥 <b>ورودی:</b>\n<code>{_esc(text[:200])}</code>\n\n"
+        f"📤 <b>خروجی:</b>\n<code>{info['result']}</code>"
+    )
+    bot.send_message(message.chat.id, result, parse_mode='HTML')
 
 
-def _handle_url(message, text: str):
-    enc = url_encode(text)
-    dec = url_decode(text)
+def _handle_base64_decode(message, text: str):
+    info = base64_decode(text)
+    if not info.get("success"):
+        bot.send_message(
+            message.chat.id,
+            f"❌ خطا: {info.get('error')}\n\n"
+            f"💡 مطمئن شو متن Base64 معتبره."
+        )
+        return
 
-    result = "🔗 <b>URL Encode/Decode</b>\n━━━━━━━━━━━━━━━\n\n"
+    result = (
+        f"🔓 <b>Base64 Decode</b>\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"📥 <b>ورودی:</b>\n<code>{_esc(text[:200])}</code>\n\n"
+        f"📤 <b>خروجی:</b>\n<code>{_esc(info['result'][:1000])}</code>"
+    )
+    bot.send_message(message.chat.id, result, parse_mode='HTML')
 
-    if enc.get("success"):
-        result += f"<b>Encode:</b>\n<code>{enc['result']}</code>\n\n"
 
-    if dec.get("success"):
-        dec_safe = dec["result"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        result += f"<b>Decode:</b>\n<code>{dec_safe}</code>"
+def _handle_url_encode(message, text: str):
+    info = url_encode(text)
+    if not info.get("success"):
+        bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
+        return
 
+    result = (
+        f"🔒 <b>URL Encode</b>\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"📥 <b>ورودی:</b>\n<code>{_esc(text[:200])}</code>\n\n"
+        f"📤 <b>خروجی:</b>\n<code>{info['result']}</code>"
+    )
+    bot.send_message(message.chat.id, result, parse_mode='HTML')
+
+
+def _handle_url_decode(message, text: str):
+    info = url_decode(text)
+    if not info.get("success"):
+        bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
+        return
+
+    result = (
+        f"🔓 <b>URL Decode</b>\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"📥 <b>ورودی:</b>\n<code>{_esc(text[:200])}</code>\n\n"
+        f"📤 <b>خروجی:</b>\n<code>{_esc(info['result'][:1000])}</code>"
+    )
     bot.send_message(message.chat.id, result, parse_mode='HTML')
 
 
@@ -434,13 +569,12 @@ def _handle_number(message, text: str):
 
 
 def _handle_ascii(message, text: str):
-    info = ascii_art(text[:20])  # محدود به ۲۰ کاراکتر
+    info = ascii_art(text[:20])
     if not info.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error')}")
         return
 
-    # escape برای HTML
-    ascii_safe = info["result"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    ascii_safe = _esc(info["result"])
 
     result = f"🎨 <b>ASCII Art</b> (<code>{info['font']}</code>)\n\n<pre>{ascii_safe}</pre>"
     bot.send_message(message.chat.id, result, parse_mode='HTML')
