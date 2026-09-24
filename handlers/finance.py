@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 # 🏠 منوی اصلی ابزار مالی
 # ============================================================
 def _main_finance_menu(user_id: int = None):
-    """منوی اصلی ابزار مالی"""
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("💵 ارز دیجیتال", callback_data="fin_op_crypto"),
@@ -35,7 +34,6 @@ def _main_finance_menu(user_id: int = None):
 
 
 def _back_button_markup(callback_data: str = "fin_back"):
-    """دکمه بازگشت"""
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data=callback_data))
     return markup
@@ -45,6 +43,9 @@ def _back_button_markup(callback_data: str = "fin_back"):
 @bot.message_handler(func=lambda m: m.text == '💰 ابزار مالی')
 def finance_start(message):
     user_id = message.from_user.id
+
+    # 👇 اول کل state رو پاک کن
+    clear_state(user_id)
     set_state(user_id, mode="finance", waiting_for=None)
 
     bot.send_message(
@@ -66,7 +67,8 @@ def finance_start(message):
 @bot.callback_query_handler(func=lambda c: c.data == "fin_back")
 def finance_back(call):
     user_id = call.from_user.id
-    set_state(user_id, waiting_for=None)
+    clear_state(user_id)
+    set_state(user_id, mode="finance", waiting_for=None)
 
     bot.answer_callback_query(call.id)
     try:
@@ -119,7 +121,7 @@ def finance_action(call):
     elif action == "iran":
         _show_iran(call, user_id)
     elif action == "date":
-        set_state(user_id, waiting_for="fin_date")
+        set_state(user_id, mode="finance", waiting_for="fin_date")
         try:
             bot.edit_message_text(
                 "📅 <b>تبدیل تاریخ</b>\n\n"
@@ -137,7 +139,7 @@ def finance_action(call):
                 parse_mode='HTML', reply_markup=_back_button_markup()
             )
     elif action == "calc":
-        set_state(user_id, waiting_for="fin_calc")
+        set_state(user_id, mode="finance", waiting_for="fin_calc")
         try:
             bot.edit_message_text(
                 "🧮 <b>ماشین حساب</b>\n\n"
@@ -158,7 +160,7 @@ def finance_action(call):
 # 💵 ارز دیجیتال
 # ============================================================
 def _crypto_menu(call, user_id: int):
-    set_state(user_id, waiting_for="fin_crypto")
+    set_state(user_id, mode="finance", waiting_for="fin_crypto")
 
     markup = types.InlineKeyboardMarkup(row_width=3)
     buttons = [
@@ -246,7 +248,6 @@ def crypto_chosen(call):
 
 @bot.callback_query_handler(func=lambda c: c.data == "fin_back_crypto")
 def back_to_crypto(call):
-    """برگشت به منوی ارز دیجیتال"""
     user_id = call.from_user.id
     bot.answer_callback_query(call.id)
     _crypto_menu(call, user_id)
@@ -256,7 +257,7 @@ def back_to_crypto(call):
 # 💱 نرخ ارز
 # ============================================================
 def _rates_menu(call, user_id: int):
-    set_state(user_id, waiting_for="rates_base")
+    set_state(user_id, mode="finance", waiting_for="rates_base")
 
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -469,6 +470,7 @@ def _show_iran(call, user_id: int):
 # ============================================================
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "fin_date"
+        and get_state(m.from_user.id).get("mode") == "finance"
         and m.text
 )
 def date_receive(message):
@@ -498,6 +500,7 @@ def date_receive(message):
 # ============================================================
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "fin_calc"
+        and get_state(m.from_user.id).get("mode") == "finance"
         and m.text
 )
 def calc_receive(message):

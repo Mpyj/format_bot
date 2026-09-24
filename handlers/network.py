@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 @check_usage_limit
 def network_start(message):
     user_id = message.from_user.id
+
+    # 👇 پاک کردن state قبلی
+    clear_state(user_id)
     set_state(user_id, mode="network", waiting_for=None)
 
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -72,7 +75,7 @@ def network_action(call):
         "speed": "📶 <b>تست سرعت</b>\n\nیه لینک دانلود بفرست:\nمثال: <code>https://speed.hetzner.de/100MB.bin</code>",
     }
 
-    set_state(user_id, net_action=action, waiting_for=f"net_{action}")
+    set_state(user_id, mode="network", net_action=action, waiting_for=f"net_{action}")
     bot.edit_message_text(
         hints.get(action, "عملیات نامشخص"),
         call.message.chat.id, call.message.message_id,
@@ -83,6 +86,7 @@ def network_action(call):
 # ---------- دریافت ورودی ----------
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for", "").startswith("net_")
+        and get_state(m.from_user.id).get("mode") == "network"  # 👈 این خط مهمه
         and m.text
         and not m.text.startswith("/")
 )
@@ -122,7 +126,6 @@ def network_receive(message):
 # ============================================================
 def _show_whois(message, domain: str, user_id: int):
     info = get_whois(domain)
-
     if not info.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error', 'ناشناخته')}")
         return
@@ -141,15 +144,13 @@ def _show_whois(message, domain: str, user_id: int):
         text += f"🏛 <b>سازمان:</b> {info['org']}\n"
 
     if info.get("name_servers"):
-        ns_list = info["name_servers"][:5]
         text += "\n🌐 <b>Name Servers:</b>\n"
-        for ns in ns_list:
+        for ns in info["name_servers"][:5]:
             text += f"  • <code>{ns}</code>\n"
 
     if info.get("emails"):
-        emails = info["emails"][:3]
         text += "\n📧 <b>ایمیل‌ها:</b>\n"
-        for em in emails:
+        for em in info["emails"][:3]:
             text += f"  • <code>{em}</code>\n"
 
     bot.send_message(message.chat.id, text, parse_mode='HTML')
@@ -161,7 +162,6 @@ def _show_whois(message, domain: str, user_id: int):
 # ============================================================
 def _show_dns(message, domain: str, user_id: int):
     info = get_dns(domain)
-
     if not info.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error', 'ناشناخته')}")
         return
@@ -190,7 +190,6 @@ def _show_dns(message, domain: str, user_id: int):
 # ============================================================
 def _show_ports(message, host: str, user_id: int):
     result = scan_ports(host)
-
     if not result.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {result.get('error', 'ناشناخته')}")
         return
@@ -219,7 +218,6 @@ def _show_ports(message, host: str, user_id: int):
 # ============================================================
 def _show_ssl(message, host: str, user_id: int):
     info = get_ssl_details(host)
-
     if not info.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {info.get('error', 'ناشناخته')}")
         return
@@ -262,24 +260,19 @@ def _show_ssl(message, host: str, user_id: int):
 # ============================================================
 def _show_speed(message, url: str, user_id: int):
     result = test_download_speed(url)
-
     if not result.get("success"):
         bot.send_message(message.chat.id, f"❌ خطا: {result.get('error', 'ناشناخته')}")
         return
 
     speed = result["speed_mbps"]
     if speed > 50:
-        emoji = "🚀"
-        quality = "عالی"
+        emoji = "🚀"; quality = "عالی"
     elif speed > 10:
-        emoji = "⚡"
-        quality = "خوب"
+        emoji = "⚡"; quality = "خوب"
     elif speed > 2:
-        emoji = "👍"
-        quality = "متوسط"
+        emoji = "👍"; quality = "متوسط"
     else:
-        emoji = "🐢"
-        quality = "کند"
+        emoji = "🐢"; quality = "کند"
 
     text = (
         f"📶 <b>تست سرعت</b>\n"
