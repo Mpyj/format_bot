@@ -2,7 +2,6 @@ import os
 import uuid
 import logging
 from pypdf import PdfReader, PdfWriter
-from pypdf.errors import PdfReadError
 
 from config import TEMP_DIR
 
@@ -16,12 +15,10 @@ if not os.path.exists(POPPLER_PATH):
 
 # ---------- ادغام ----------
 def merge_pdfs(paths: list[str]) -> str | None:
-    """چند PDF رو با هم ادغام می‌کنه"""
     try:
         writer = PdfWriter()
         for p in paths:
             writer.append(p)
-
         output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_merged.pdf")
         with open(output, "wb") as f:
             writer.write(f)
@@ -149,15 +146,30 @@ def images_to_pdf(image_paths: list[str]) -> str | None:
         return None
 
 
-# ---------- فشرده‌سازی ----------
+# ---------- فشرده‌سازی (اصلاح‌شده) ----------
 def compress_pdf(input_path: str) -> str | None:
+    """PDF رو فشرده می‌کنه"""
     try:
         reader = PdfReader(input_path)
         writer = PdfWriter()
+
+        # ۱) اول همه صفحات رو اضافه کن
         for page in reader.pages:
-            page.compress_content_streams()
             writer.add_page(page)
-        writer.compress_identical_objects()
+
+        # ۲) بعد فشرده‌سازی کن
+        for page in writer.pages:
+            try:
+                page.compress_content_streams()
+            except Exception as e:
+                logger.warning(f"خطا در فشرده‌سازی یه صفحه: {e}")
+
+        # ۳) فشرده‌سازی اشیای یکسان
+        try:
+            writer.compress_identical_objects()
+        except Exception as e:
+            logger.warning(f"خطا در فشرده‌سازی اشیا: {e}")
+
         output = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_compressed.pdf")
         with open(output, "wb") as f:
             writer.write(f)
