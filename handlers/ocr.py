@@ -2,7 +2,7 @@ import os
 import uuid
 import logging
 import threading
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageStat
 import pytesseract
 from telebot import types
 
@@ -17,14 +17,13 @@ logger = logging.getLogger(__name__)
 
 # ============================================================
 # ⚠️ مسیر Tesseract و tessdata
-# - روی ویندوز (لوکال): C:\PROGRA~1\Tesseract-OCR
-# - روی Railway (لینوکس): /usr/bin/tesseract و /app/tessdata
+# - ویندوز: C:\PROGRA~1\Tesseract-OCR
+# - لینوکس (Docker): /usr/bin/tesseract و /app/tessdata
 # ============================================================
 TESSERACT_PATH = "/usr/bin/tesseract"
 TESSDATA_PATH = "/app/tessdata"
 
 if os.name == "nt":
-    # ویندوز
     TESSERACT_PATH = r"C:\PROGRA~1\Tesseract-OCR\tesseract.exe"
     TESSDATA_PATH = r"C:\PROGRA~1\Tesseract-OCR\tessdata"
 
@@ -83,7 +82,7 @@ def ocr_receive_photo(message):
     lang = state.get("ocr_lang", "fas+eng")
 
     path = None
-    preprocessed_path = None
+    preprocessed_paths = []
     try:
         # دریافت فایل
         if message.content_type == 'photo':
@@ -99,18 +98,23 @@ def ocr_receive_photo(message):
 
         bot.send_message(message.chat.id, "⏳ در حال استخراج متن...")
 
-        # پیش‌پردازش
-        preprocessed_path = _preprocess_image(path)
-        img = Image.open(preprocessed_path)
+        # ============================================================
+        # 🎯 چند نسخه پیش‌پردازش، بهترین نتیجه رو انتخاب کن
+        # ============================================================
+        preprocessed_paths = _preprocess_image_multi(path)
+        img = Image.open(path)
 
-        # OCR
-        config = f'--tessdata-dir {TESSDATA_PATH} --psm 6'
-        text = pytesseract.image_to_string(img, lang=lang, config=config).strip()
+        text = _run_ocr_multi(img, preprocessed_paths, lang)
 
         # ارسال نتیجه
-        if not text:
-            bot.send_message(message.chat.id, "⚠️ متنی توی عکس پیدا نشد.")
+        if not text or len(text.strip()) < 3:
+            bot.send_message(
+                message.chat.id,
+                "⚠️ متنی توی عکس پیدا نشد.\n\n"
+                "💡 اگه عکس متن داره، ممکنه فونت تزئینی یا پس‌زمینه پیچیده داشته باشه."
+            )
         else:
+            text = text.strip()
             if len(text) <= 4000:
                 bot.send_message(
                     message.chat.id,
@@ -129,7 +133,7 @@ def ocr_receive_photo(message):
                 delete_file(txt_path)
 
         # ثبت در دیتابیس
-        _log_operation(user_id, "ocr", ext.lstrip("."), "txt", len(text))
+        _log_operation(user_id, "ocr", ext.lstrip("."), "txt", len(text or ""))
         mark_user_used(user_id)
 
         bot.send_message(
@@ -152,40 +156,158 @@ def ocr_receive_photo(message):
     finally:
         if path:
             delete_file(path)
-        if preprocessed_path:
-            delete_file(preprocessed_path)
+        for p in preprocessed_paths:
+            delete_file(p)
         clear_state(user_id)
 
 
-def _preprocess_image(path: str) -> str:
+# ============================================================
+# 🎨 پیش‌پردازش چندگانه
+# ============================================================
+def _preprocess_image_multi(path: str) -> list:
     """
-    پیش‌پردازش عکس برای OCR بهتر:
-    1. تبدیل به grayscale
-    2. بزرگ کردن ۲ برابر (برای متن ریز)
-    3. افزایش کنتراست
+    چند نسخه از عکس رو می‌سازه:
+    1. Grayscale ساده
+    2. Invert شده (برای پس‌زمینه تیره)
+    3. Binarized (سیاه-سفید)
+    4. Contrast بالا
     """
-    img = Image.open(path)
+    output_paths = []
+    img_orig = Image.open(path)
 
-    if img.mode != "L":
-        img = img.convert("L")
+    # تبدیل به grayscale
+    if img_orig.mode != "L":
+        img_gray = img_orig.convert("L")
+    else:
+        img_gray = img_orig.copy()
 
-    w, h = img.size
-    if w < 2000:
-        img = img.resize((w * 2, h * 2), Image.LANCZOS)
+    # بزرگ‌نمایی اگه کوچیکه
+    w, h = img_gray.size
+    if w < 1500:
+        img_gray = img_gray.resize((w * 2, h * 2), Image.LANCZOS)
 
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(2.0)
+    # ---- نسخه ۱: Grayscale ساده ----
+    p1 = path + "_gray.png"
+    img_gray.save(p1, "PNG")
+    output_paths.append(p1)
 
-    new_path = path + "_prep.png"
-    img.save(new_path, "PNG")
-    return new_path
+    # ---- نسخه ۲: تشخیص تیرگی و invert ----
+    stat = ImageStat.Stat(img_gray)
+    mean_brightness = stat.mean[0]
+    logger.info(f"🌓 میانگین روشنایی: {mean_brightness:.1f}")
+
+    if mean_brightness < 128:
+        # عکس تیره → invert
+        img_inv = ImageOps.invert(img_gray)
+        p2 = path + "_inv.png"
+        img_inv.save(p2, "PNG")
+        output_paths.append(p2)
+        logger.info("🌓 نسخه invert شده ساخته شد")
+    else:
+        img_inv = img_gray
+
+    # ---- نسخه ۳: کنتراست بالا ----
+    enhancer = ImageEnhance.Contrast(img_inv)
+    img_contrast = enhancer.enhance(2.5)
+    p3 = path + "_contrast.png"
+    img_contrast.save(p3, "PNG")
+    output_paths.append(p3)
+
+    # ---- نسخه ۴: Binarization + Denoise + Sharpen ----
+    # Sharpen
+    img_sharp = img_contrast.filter(ImageFilter.SHARPEN)
+    # Denoise
+    img_denoised = img_sharp.filter(ImageFilter.MedianFilter(size=3))
+    # Binarization
+    img_bin = img_denoised.point(lambda x: 255 if x > 128 else 0, mode="1")
+    p4 = path + "_bin.png"
+    img_bin.save(p4, "PNG")
+    output_paths.append(p4)
+
+    return output_paths
+
+
+# ============================================================
+# 🔍 اجرای OCR روی همه نسخه‌ها و انتخاب بهترین
+# ============================================================
+def _run_ocr_multi(img_orig, preprocessed_paths: list, lang: str) -> str:
+    """
+    OCR رو روی همه نسخه‌ها اجرا می‌کنه و بهترین نتیجه رو برمی‌گردونه.
+    معیار: بیشترین تعداد کلمات meaningful
+    """
+    best_text = ""
+    best_score = 0
+
+    # حالت‌های مختلف PSM
+    psm_modes = [6, 4, 11]  # 6: بلوک متن، 4: ستون، 11: متن پراکنده
+
+    for i, p_path in enumerate(preprocessed_paths):
+        if not os.path.exists(p_path):
+            continue
+
+        img = Image.open(p_path)
+
+        for psm in psm_modes:
+            try:
+                config = f'--tessdata-dir {TESSDATA_PATH} --psm {psm} --oem 3'
+                text = pytesseract.image_to_string(img, lang=lang, config=config).strip()
+
+                score = _score_text(text)
+                logger.info(f"📊 نسخه {i+1}, psm {psm}: امتیاز {score}")
+
+                if score > best_score:
+                    best_score = score
+                    best_text = text
+
+                # اگه امتیاز خیلی خوب بود، زودتر تموم کن
+                if score > 50:
+                    logger.info(f"✅ نتیجه خوب پیدا شد (امتیاز {score})")
+                    return text
+
+            except Exception as e:
+                logger.warning(f"خطا در psm {psm}: {e}")
+                continue
+
+    logger.info(f"🏆 بهترین امتیاز نهایی: {best_score}")
+    return best_text
+
+
+def _score_text(text: str) -> int:
+    """
+    به متن امتیاز می‌ده بر اساس:
+    - تعداد کلمات meaningful (>= 2 حرف)
+    - نسبت حروف به کل کاراکترها
+    - پاداش برای کلمات فارسی/انگلیسی معتبر
+    """
+    if not text:
+        return 0
+
+    words = text.split()
+    meaningful_words = [w for w in words if len(w) >= 2]
+
+    # نسبت حروف به کل
+    total_chars = len(text)
+    letter_chars = sum(1 for c in text if c.isalpha())
+    letter_ratio = letter_chars / total_chars if total_chars > 0 else 0
+
+    # امتیاز
+    score = len(meaningful_words) * 2
+    score += int(letter_ratio * 30)
+
+    # پاداش برای کلمات طولانی
+    long_words = [w for w in words if len(w) >= 4]
+    score += len(long_words) * 3
+
+    return score
 
 
 def _escape_html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-# ---------- ثبت در دیتابیس ----------
+# ============================================================
+# 📊 ثبت در دیتابیس
+# ============================================================
 def _log_operation(user_id: int, op_type: str, in_fmt, out_fmt, size: int):
     def runner():
         try:
