@@ -20,7 +20,6 @@ TIMEOUT = 10
 def get_whois(domain: str) -> dict:
     """اطلاعات WHOIS دامنه"""
     try:
-        # حذف پروتکل اگه داشت
         domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
 
         w = whois.whois(domain)
@@ -81,7 +80,7 @@ def get_dns(domain: str) -> dict:
             result[rtype] = []
         except dns.resolver.NXDOMAIN:
             return {"success": False, "error": "دامنه وجود نداره"}
-        except Exception as e:
+        except Exception:
             result[rtype] = []
 
     return result
@@ -118,7 +117,6 @@ def scan_ports(host: str, ports: list = None) -> dict:
 
     host = host.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
 
-    # resolve IP
     try:
         ip = socket.gethostbyname(host)
     except Exception as e:
@@ -153,24 +151,30 @@ def scan_ports(host: str, ports: list = None) -> dict:
 
 
 # ============================================================
-# 📶 تست سرعت دانلود
+# 📶 تست سرعت دانلود (اصلاح‌شده — فایل ذخیره نمیشه)
 # ============================================================
 def test_download_speed(url: str, max_seconds: int = 5) -> dict:
-    """سرعت دانلود از یه لینک"""
+    """
+    سرعت دانلود از یه لینک.
+    ⚠️ فایل روی دیسک ذخیره نمیشه — فقط توی RAM شمرده میشه و دور ریخته میشه.
+    """
+    response = None
     try:
         start = time.time()
-        response = requests.get(url, stream=True, timeout=TIMEOUT)
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0 (FormatBot/1.0)"}
+        )
         response.raise_for_status()
 
         total_bytes = 0
-        chunks = 0
 
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
                 total_bytes += len(chunk)
-                chunks += 1
 
-            # بعد از max_seconds متوقف شو
             elapsed = time.time() - start
             if elapsed >= max_seconds:
                 break
@@ -189,13 +193,26 @@ def test_download_speed(url: str, max_seconds: int = 5) -> dict:
             "speed_kbps": speed_kbps,
             "speed_mbps": speed_mbps,
         }
+    except requests.Timeout:
+        return {"success": False, "error": "زمان پاسخ تموم شد (timeout)"}
+    except requests.ConnectionError:
+        return {"success": False, "error": "اتصال برقرار نشد"}
+    except requests.HTTPError as e:
+        return {"success": False, "error": f"خطای HTTP: {e.response.status_code}"}
     except Exception as e:
         logger.warning(f"خطا در تست سرعت: {e}")
         return {"success": False, "error": str(e)}
+    finally:
+        # 👇 مهم: کانکشن رو قطع کن تا سرور درگیر نمونه
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
 
 
 # ============================================================
-# 🔒 چک SSL کامل
+# 🔒 جزئیات SSL
 # ============================================================
 def get_ssl_details(host: str) -> dict:
     """اطلاعات کامل SSL"""
@@ -209,7 +226,6 @@ def get_ssl_details(host: str) -> dict:
                 tls_version = ssock.version()
                 cipher = ssock.cipher()
 
-        # تاریخ انقضا
         not_after = cert.get("notAfter")
         expire_date = None
         days_left = None
@@ -217,7 +233,6 @@ def get_ssl_details(host: str) -> dict:
             expire_date = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
             days_left = (expire_date - datetime.now()).days
 
-        # صادرکننده
         issuer = dict(x[0] for x in cert.get("issuer", []))
         subject = dict(x[0] for x in cert.get("subject", []))
 
