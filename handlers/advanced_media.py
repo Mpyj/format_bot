@@ -43,14 +43,11 @@ def _adv_media_menu(user_id: int = None):
     )
     markup.add(
         types.InlineKeyboardButton("🎬 عکس → ویدیو", callback_data="adv_media_slideshow"),
+        types.InlineKeyboardButton("📊 نمودار موج", callback_data="adv_media_waveform"),
     )
-    markup.add(
-        types.InlineKeyboardButton("📊 نمودار موج صدا", callback_data="adv_media_waveform"),
-    )
-    # 🆕 سه قابلیت جدید
     markup.add(
         types.InlineKeyboardButton("🔊 افزایش صدا", callback_data="adv_media_amplify"),
-        types.InlineKeyboardButton("🎵 افزودن Reverb", callback_data="adv_media_reverb"),
+        types.InlineKeyboardButton("🎵 Reverb", callback_data="adv_media_reverb"),
     )
     markup.add(
         types.InlineKeyboardButton("🎚 تغییر سرعت صدا", callback_data="adv_media_audiospeed"),
@@ -165,82 +162,19 @@ def adv_media_action(call):
             )
         return
 
-    # 🔊 افزایش صدا
-    if action == "amplify":
-        set_state(user_id, mode="adv_media", adv_action="amplify", waiting_for="adv_amplify")
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        markup.add(
-            types.InlineKeyboardButton("1.5x", callback_data="amp_1.5"),
-            types.InlineKeyboardButton("2x", callback_data="amp_2.0"),
-            types.InlineKeyboardButton("3x", callback_data="amp_3.0"),
-        )
-        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adv_media_back"))
-        try:
-            bot.edit_message_text(
-                "🔊 <b>افزایش صدا</b>\n\n"
-                "ضریب افزایش رو انتخاب کن:\n\n"
-                "⚠️ اگه صدا خیلی بلند بشه، ممکنه اعوجاج داشته باشه.",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=markup
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "🔊 <b>افزایش صدا</b>", parse_mode='HTML', reply_markup=markup)
-        return
-
-    # 🎵 Reverb
-    if action == "reverb":
-        set_state(user_id, mode="adv_media", adv_action="reverb", waiting_for="adv_reverb")
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        markup.add(
-            types.InlineKeyboardButton("🔸 کوچیک", callback_data="rev_small"),
-            types.InlineKeyboardButton("🔶 متوسط", callback_data="rev_medium"),
-            types.InlineKeyboardButton("🔷 بزرگ", callback_data="rev_large"),
-        )
-        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adv_media_back"))
-        try:
-            bot.edit_message_text(
-                "🎵 <b>افزودن Reverb</b>\n\n"
-                "شدت افکت رو انتخاب کن:",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=markup
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "🎵 <b>افزودن Reverb</b>", parse_mode='HTML', reply_markup=markup)
-        return
-
-    # 🎚 تغییر سرعت صدا
-    if action == "audiospeed":
-        set_state(user_id, mode="adv_media", adv_action="audiospeed", waiting_for="adv_audiospeed")
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        markup.add(
-            types.InlineKeyboardButton("0.5x", callback_data="aspd_0.5"),
-            types.InlineKeyboardButton("0.75x", callback_data="aspd_0.75"),
-            types.InlineKeyboardButton("1.5x", callback_data="aspd_1.5"),
-            types.InlineKeyboardButton("2x", callback_data="aspd_2.0"),
-            types.InlineKeyboardButton("3x", callback_data="aspd_3.0"),
-        )
-        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adv_media_back"))
-        try:
-            bot.edit_message_text(
-                "🎚 <b>تغییر سرعت صدا</b>\n\n"
-                "سرعت رو انتخاب کن (پیچ تغییر نمی‌کنه):",
-                call.message.chat.id, call.message.message_id,
-                parse_mode='HTML', reply_markup=markup
-            )
-        except Exception:
-            bot.send_message(call.message.chat.id, "🎚 <b>تغییر سرعت صدا</b>", parse_mode='HTML', reply_markup=markup)
-        return
-
-    # hints عادی
+    # راهنماها
     hints = {
-        "frame": "📸 <b>استخراج فریم</b>\n\nویدیو رو بفرست تا از ثانیه دلخواه عکس بگیرم.",
-        "thumb": "🖼️ <b>Thumbnail</b>\n\nویدیو رو بفرست تا بهترین فریم رو انتخاب کنم.",
-        "timelapse": "⏱ <b>تایم‌لپس</b>\n\nویدیو رو بفرست تا سرعتش رو زیاد کنم.",
-        "noaudio": "🔇 <b>حذف صدا</b>\n\nویدیو رو بفرست تا صدا رو حذف کنم.",
-        "concat": "🎞 <b>ترکیب ۲ ویدیو</b>\n\nویدیو <b>اول</b> رو بفرست.",
-        "subtitle": "📝 <b>افزودن زیرنویس</b>\n\nویدیو رو بفرست، بعد فایل SRT.",
-        "music": "🎵 <b>افزودن موسیقی</b>\n\nویدیو رو بفرست، بعد فایل صوتی.",
-        "waveform": "📊 <b>نمودار موج صدا</b>\n\nفایل صوتی رو بفرست.",
+        "frame": "📸 <b>استخراج فریم</b>\n\nویدیو رو بفرست:",
+        "thumb": "🖼️ <b>Thumbnail</b>\n\nویدیو رو بفرست:",
+        "timelapse": "⏱ <b>تایم‌لپس</b>\n\nویدیو رو بفرست:",
+        "noaudio": "🔇 <b>حذف صدا</b>\n\nویدیو رو بفرست:",
+        "concat": "🎞 <b>ترکیب ۲ ویدیو</b>\n\nویدیو <b>اول</b> رو بفرست:",
+        "subtitle": "📝 <b>افزودن زیرنویس</b>\n\nویدیو رو بفرست، بعد فایل SRT:",
+        "music": "🎵 <b>افزودن موسیقی</b>\n\nویدیو رو بفرست، بعد فایل صوتی:",
+        "waveform": "📊 <b>نمودار موج صدا</b>\n\nفایل صوتی رو بفرست:",
+        "amplify": "🔊 <b>افزایش صدا</b>\n\nفایل صوتی یا ویدیو رو بفرست:",
+        "reverb": "🎵 <b>افزودن Reverb</b>\n\nفایل صوتی رو بفرست:",
+        "audiospeed": "🎚 <b>تغییر سرعت صدا</b>\n\nفایل صوتی رو بفرست:",
     }
 
     set_state(user_id, mode="adv_media", adv_action=action, waiting_for=f"adv_{action}")
@@ -272,9 +206,6 @@ def adv_media_action(call):
             "adv_slideshow_more",
             "adv_frame_time",
             "adv_timelapse_speed",
-            "adv_amplify",
-            "adv_reverb",
-            "adv_audiospeed",
         )
 )
 def adv_receive_media(message):
@@ -342,35 +273,35 @@ def adv_receive_media(message):
             bot.send_message(message.chat.id, "✅ ویدیو دریافت شد.\n\nالان موسیقی رو بفرست:")
         elif action == "waveform":
             _process_waveform(message, user_id, path)
-        elif action in ("amplify", "reverb", "audiospeed"):
-            # اینا با دکمه انتخاب میشن
+        elif action == "amplify":
             set_state(user_id, adv_input_path=path)
-            if action == "amplify":
-                markup = types.InlineKeyboardMarkup(row_width=3)
-                markup.add(
-                    types.InlineKeyboardButton("1.5x", callback_data="amp_1.5"),
-                    types.InlineKeyboardButton("2x", callback_data="amp_2.0"),
-                    types.InlineKeyboardButton("3x", callback_data="amp_3.0"),
-                )
-                bot.send_message(message.chat.id, "🔊 ضریب افزایش صدا:", reply_markup=markup)
-            elif action == "reverb":
-                markup = types.InlineKeyboardMarkup(row_width=3)
-                markup.add(
-                    types.InlineKeyboardButton("🔸 کوچیک", callback_data="rev_small"),
-                    types.InlineKeyboardButton("🔶 متوسط", callback_data="rev_medium"),
-                    types.InlineKeyboardButton("🔷 بزرگ", callback_data="rev_large"),
-                )
-                bot.send_message(message.chat.id, "🎵 شدت Reverb:", reply_markup=markup)
-            elif action == "audiospeed":
-                markup = types.InlineKeyboardMarkup(row_width=3)
-                markup.add(
-                    types.InlineKeyboardButton("0.5x", callback_data="aspd_0.5"),
-                    types.InlineKeyboardButton("0.75x", callback_data="aspd_0.75"),
-                    types.InlineKeyboardButton("1.5x", callback_data="aspd_1.5"),
-                    types.InlineKeyboardButton("2x", callback_data="aspd_2.0"),
-                    types.InlineKeyboardButton("3x", callback_data="aspd_3.0"),
-                )
-                bot.send_message(message.chat.id, "🎚 سرعت صدا:", reply_markup=markup)
+            markup = types.InlineKeyboardMarkup(row_width=3)
+            markup.add(
+                types.InlineKeyboardButton("1.5x", callback_data="amp_1.5"),
+                types.InlineKeyboardButton("2x", callback_data="amp_2.0"),
+                types.InlineKeyboardButton("3x", callback_data="amp_3.0"),
+            )
+            bot.send_message(message.chat.id, "🔊 ضریب افزایش صدا:", reply_markup=markup)
+        elif action == "reverb":
+            set_state(user_id, adv_input_path=path)
+            markup = types.InlineKeyboardMarkup(row_width=3)
+            markup.add(
+                types.InlineKeyboardButton("🔸 کوچیک", callback_data="rev_small"),
+                types.InlineKeyboardButton("🔶 متوسط", callback_data="rev_medium"),
+                types.InlineKeyboardButton("🔷 بزرگ", callback_data="rev_large"),
+            )
+            bot.send_message(message.chat.id, "🎵 شدت Reverb:", reply_markup=markup)
+        elif action == "audiospeed":
+            set_state(user_id, adv_input_path=path)
+            markup = types.InlineKeyboardMarkup(row_width=3)
+            markup.add(
+                types.InlineKeyboardButton("0.5x", callback_data="aspd_0.5"),
+                types.InlineKeyboardButton("0.75x", callback_data="aspd_0.75"),
+                types.InlineKeyboardButton("1.5x", callback_data="aspd_1.5"),
+                types.InlineKeyboardButton("2x", callback_data="aspd_2.0"),
+                types.InlineKeyboardButton("3x", callback_data="aspd_3.0"),
+            )
+            bot.send_message(message.chat.id, "🎚 سرعت صدا:", reply_markup=markup)
         else:
             bot.send_message(message.chat.id, "❌ عملیات نامشخص")
             delete_file(path)
@@ -385,7 +316,7 @@ def adv_receive_media(message):
 
 
 # ============================================================
-# 🔊 افزایش صدا — انتخاب ضریب
+# 🔊 افزایش صدا
 # ============================================================
 @bot.callback_query_handler(func=lambda c: c.data.startswith("amp_"))
 def amplify_chosen(call):
@@ -435,7 +366,7 @@ def amplify_chosen(call):
 
 
 # ============================================================
-# 🎵 Reverb — انتخاب شدت
+# 🎵 Reverb
 # ============================================================
 @bot.callback_query_handler(func=lambda c: c.data.startswith("rev_"))
 def reverb_chosen(call):
@@ -527,7 +458,7 @@ def audiospeed_chosen(call):
 
 
 # ============================================================
-# 📸 فریم — دریافت زمان
+# 📸 فریم
 # ============================================================
 @bot.message_handler(
     func=lambda m: get_state(m.from_user.id).get("waiting_for") == "adv_frame_time"
@@ -663,7 +594,7 @@ def _process_noaudio(message, user_id: int, path: str):
 
 
 # ============================================================
-# 🎞 ترکیب — ویدیو دوم
+# 🎞 ترکیب
 # ============================================================
 @bot.message_handler(
     content_types=['video', 'document'],
@@ -723,7 +654,7 @@ def adv_concat_second(message):
 
 
 # ============================================================
-# 📝 زیرنویس — SRT
+# 📝 زیرنویس
 # ============================================================
 @bot.message_handler(
     content_types=['document'],
