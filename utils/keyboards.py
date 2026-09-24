@@ -37,6 +37,7 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('🎨 تصویر پیشرفته'),
             types.KeyboardButton('📄 ابزار PDF'),
             types.KeyboardButton('🎨 جعبه خلاقیت'),
+            types.KeyboardButton('🎮 سرگرمی'),
         )
         markup.add(
             types.KeyboardButton('⬅️ صفحه ۱'),

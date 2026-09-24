@@ -11,5 +11,6 @@ from . import advanced_media
 from . import advanced_image
 from . import pdf
 from . import creativity
+from . import fun
 from . import admin
 from . import middleware
