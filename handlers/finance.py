@@ -38,7 +38,7 @@ def finance_start(message):
         message.chat.id,
         "💰 <b>ابزار مالی</b>\n\n"
         "💵 <b>ارز دیجیتال</b> — BTC، ETH، USDT و ...\n"
-        "💱 <b>نرخ ارز</b> — دلار، یورو، پوند جهانی\n"
+        "💱 <b>نرخ ارز</b> — دلار، یورو، پوند (دلاری و تومانی)\n"
         "🥇 <b>طلا و سکه</b> — طلای ۱۸ عیار، سکه امامی\n"
         "📅 <b>تبدیل تاریخ</b> — شمسی ↔ میلادی ↔ قمری\n"
         "🧮 <b>ماشین حساب</b> — محاسبات ریاضی",
@@ -68,7 +68,7 @@ def finance_action(call):
     if action == "crypto":
         _crypto_menu(call, user_id)
     elif action == "rates":
-        _show_rates(call, user_id)
+        _rates_menu(call, user_id)
     elif action == "iran":
         _show_iran(call, user_id)
     elif action == "date":
@@ -148,6 +148,12 @@ def crypto_chosen(call):
         f"💵 <b>{info['name']} ({info['ticker']})</b>\n"
         f"━━━━━━━━━━━━━━━\n\n"
         f"💰 <b>قیمت:</b> ${info['price_usd']:,.2f}\n"
+    )
+
+    if info.get("price_irr"):
+        text += f"🇮🇷 <b>تومانی:</b> {info['price_irr']:,} تومان\n"
+
+    text += (
         f"{change_emoji} <b>تغییر ۲۴ساعت:</b> {change_str}\n"
         f"📊 <b>حجم ۲۴ساعت:</b> ${info['volume_24h']:,.0f}\n\n"
         f"🕐 آخرین آپدیت: {info['updated']}"
@@ -162,11 +168,37 @@ def crypto_chosen(call):
 
 
 # ============================================================
-# 💱 نرخ ارز
+# 💱 نرخ ارز (دلاری و تومانی)
 # ============================================================
-def _show_rates(call, user_id: int):
+def _rates_menu(call, user_id: int):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🌍 بر اساس دلار", callback_data="rates_usd"),
+        types.InlineKeyboardButton("🇮🇷 بر اساس تومان", callback_data="rates_irr"),
+    )
+    bot.edit_message_text(
+        "💱 <b>نرخ ارز</b>\n\n"
+        "نرخ‌ها رو بر اساس چی می‌خوای؟",
+        call.message.chat.id, call.message.message_id,
+        parse_mode='HTML', reply_markup=markup
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data in ["rates_usd", "rates_irr"])
+def rates_base_chosen(call):
+    user_id = call.from_user.id
+    mode = call.data.replace("rates_", "")
+
     bot.answer_callback_query(call.id, "در حال دریافت...")
 
+    if mode == "usd":
+        _show_rates_usd(call, user_id)
+    else:
+        _show_rates_irr(call, user_id)
+
+
+def _show_rates_usd(call, user_id: int):
+    """نرخ‌ها نسبت به دلار"""
     info = get_global_rates("USD")
 
     if not info.get("success"):
@@ -185,6 +217,63 @@ def _show_rates(call, user_id: int):
             text += f"{name}: <code>{rate:.4f}</code>\n"
 
     text += f"\n🕐 {info.get('updated', '')}"
+
+    bot.edit_message_text(
+        text,
+        call.message.chat.id, call.message.message_id,
+        parse_mode='HTML'
+    )
+    mark_user_used(user_id)
+
+
+def _show_rates_irr(call, user_id: int):
+    """نرخ‌ها به تومان"""
+    # ۱) نرخ دلار به تومان از TGJU
+    iran_info = get_iran_rates()
+    if not iran_info.get("success"):
+        bot.edit_message_text(
+            f"❌ خطا در دریافت نرخ دلار: {iran_info.get('error', 'ناشناخته')}",
+            call.message.chat.id, call.message.message_id
+        )
+        return
+
+    usd_rate = iran_info["data"].get("دلار")
+    if not usd_rate:
+        bot.edit_message_text(
+            "❌ نرخ دلار از TGJU دریافت نشد.",
+            call.message.chat.id, call.message.message_id
+        )
+        return
+
+    # ۲) نرخ‌های جهانی نسبت به دلار
+    global_info = get_global_rates("USD")
+    if not global_info.get("success"):
+        bot.edit_message_text(
+            f"❌ خطا در دریافت نرخ جهانی: {global_info.get('error', 'ناشناخته')}",
+            call.message.chat.id, call.message.message_id
+        )
+        return
+
+    rates = global_info["rates"]
+
+    text = (
+        f"💱 <b>نرخ ارز (به تومان)</b>\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"💵 <b>دلار پایه:</b> {usd_rate:,} تومان\n\n"
+    )
+
+    # ۳) تبدیل هر ارز به تومان
+    for code in ["EUR", "GBP", "AED", "TRY", "CNY", "RUB", "CAD", "AUD", "JPY"]:
+        rate_vs_usd = rates.get(code)
+        if rate_vs_usd:
+            # ۱ دلار = usd_rate تومان
+            # ۱ code = (1/rate_vs_usd) دلار
+            # ۱ code = usd_rate / rate_vs_usd تومان
+            toman_price = usd_rate / rate_vs_usd
+            name = CURRENCY_NAMES.get(code, code)
+            text += f"{name}: <code>{toman_price:,.0f}</code> تومان\n"
+
+    text += f"\n🕐 {iran_info.get('updated', '')}"
 
     bot.edit_message_text(
         text,
