@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT = 15
 
+
 # ============================================================
 # 🗄 Cache ساده در حافظه
 # ============================================================
@@ -18,7 +19,6 @@ _cache = {}
 
 
 def _get_cache(key: str, ttl: int):
-    """اگه cache معتبر بود، برگردون"""
     if key in _cache:
         data, timestamp = _cache[key]
         if time.time() - timestamp < ttl:
@@ -31,7 +31,7 @@ def _set_cache(key: str, data):
 
 
 # ============================================================
-# 💵 قیمت ارز دیجیتال (CoinGecko — بدون کلید)
+# 💵 قیمت ارز دیجیتال (CoinGecko)
 # ============================================================
 CRYPTO_NAMES = {
     "btc": ("bitcoin", "Bitcoin", "BTC"),
@@ -48,14 +48,12 @@ CRYPTO_NAMES = {
 
 
 def get_crypto_price(symbol: str) -> dict:
-    """قیمت ارز دیجیتال از CoinGecko (cache ۵ دقیقه)"""
     symbol = symbol.lower().strip()
-
     if symbol not in CRYPTO_NAMES:
         return {"success": False, "error": f"ارز {symbol} پشتیبانی نمیشه"}
 
     cache_key = f"crypto_{symbol}"
-    cached = _get_cache(cache_key, 300)  # ۵ دقیقه
+    cached = _get_cache(cache_key, 300)
     if cached:
         return cached
 
@@ -95,7 +93,7 @@ def get_crypto_price(symbol: str) -> dict:
 
 
 # ============================================================
-# 💱 نرخ ارز جهانی (ExchangeRate-API — Open Access)
+# 💱 نرخ ارز جهانی
 # ============================================================
 CURRENCY_NAMES = {
     "USD": "🇺🇸 دلار آمریکا",
@@ -112,7 +110,6 @@ CURRENCY_NAMES = {
 
 
 def get_global_rates(base: str = "USD") -> dict:
-    """نرخ ارزهای جهانی نسبت به base (cache ۱ ساعت)"""
     cache_key = f"rates_{base}"
     cached = _get_cache(cache_key, 3600)
     if cached:
@@ -133,7 +130,6 @@ def get_global_rates(base: str = "USD") -> dict:
             "base": base,
             "rates": rates,
             "updated": data.get("time_last_update_utc", ""),
-            "next_update": data.get("time_next_update_utc", ""),
         }
         _set_cache(cache_key, result)
         return result
@@ -142,62 +138,212 @@ def get_global_rates(base: str = "USD") -> dict:
         return {"success": False, "error": str(e)}
 
 
+# ============================================================
+# 🇮🇷 نرخ ارز، طلا و سکه ایران (چند API جایگزین)
+# ============================================================
 def get_iran_rates() -> dict:
     """
-    نرخ ارز، طلا و سکه ایران از TGJU (cache ۱۰ دقیقه)
+    نرخ ارز، طلا و سکه ایران — از چند API جایگزین
     """
     cache_key = "iran_rates"
     cached = _get_cache(cache_key, 600)
     if cached:
         return cached
 
+    # تلاش ۱: Bonbast (اول این چون IP خارجی رو بلاک نمی‌کنه)
+    result = _try_bonbast()
+    if result and result.get("success") and result.get("data"):
+        _set_cache(cache_key, result)
+        logger.info("✅ نرخ‌ها از Bonbast")
+        return result
+
+    # تلاش ۲: TGJU scrape
+    result = _try_tgju_scrape()
+    if result and result.get("success") and result.get("data"):
+        _set_cache(cache_key, result)
+        logger.info("✅ نرخ‌ها از TGJU scrape")
+        return result
+
+    # تلاش ۳: TGJU API غیررسمی
+    result = _try_tgju_api()
+    if result and result.get("success") and result.get("data"):
+        _set_cache(cache_key, result)
+        logger.info("✅ نرخ‌ها از TGJU API")
+        return result
+
+    return {"success": False, "error": "هیچ API جواب نداد"}
+
+
+def _try_bonbast() -> dict:
+    """Bonbast.com — نرخ ارز و طلا"""
+    try:
+        url = "https://www.bonbast.com/json"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Referer": "https://www.bonbast.com/",
+        }
+        r = requests.post(url, headers=headers, timeout=TIMEOUT)
+        r.raise_for_status()
+
+        data = r.json()
+
+        result = {
+            "success": True,
+            "data": {},
+            "updated": datetime.now().strftime("%H:%M:%S"),
+        }
+
+        mapping = {
+            "usd1": "دلار",
+            "eur1": "یورو",
+            "gbp1": "پوند",
+            "aed1": "درهم امارات",
+            "try1": "لیر ترکیه",
+            "cny1": "یوان چین",
+            "rub1": "روبل",
+            "gold_18k": "طلای ۱۸ عیار",
+            "gold_24k": "طلای ۲۴ عیار",
+            "emami1": "سکه امامی",
+            "azadi1": "سکه بهار آزادی",
+            "nim1": "نیم سکه",
+            "rob1": "ربع سکه",
+            "gerami1": "سکه گرمی",
+        }
+
+        for key, name in mapping.items():
+            if key in data:
+                try:
+                    result["data"][name] = int(str(data[key]).replace(",", ""))
+                except (ValueError, TypeError):
+                    pass
+
+        if not result["data"]:
+            return {"success": False, "error": "Bonbast داده نداد"}
+
+        return result
+    except Exception as e:
+        logger.warning(f"Bonbast خطا: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def _try_tgju_scrape() -> dict:
+    """scrape TGJU با selectorهای جدید"""
     try:
         url = "https://www.tgju.org/"
         headers = {
-            "User-Agent": "Mozilla/5.0 (FormatBot/1.0)"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+            "Accept-Language": "fa,en;q=0.9",
         }
         r = requests.get(url, headers=headers, timeout=TIMEOUT)
         r.raise_for_status()
+
         soup = BeautifulSoup(r.text, "lxml")
 
-        result = {"success": True, "data": {}, "updated": datetime.now().strftime("%H:%M:%S")}
-
-        # نگاشت اسلاگ‌های TGJU
-        targets = {
-            "price_dollar_rl": "دلار",
-            "price_eur": "یورو",
-            "price_aed": "درهم امارات",
-            "price_try": "لیر ترکیه",
-            "geram18": "طلای ۱۸ عیار",
-            "geram24": "طلای ۲۴ عیار",
-            "sekke_emami": "سکه امامی",
-            "sekke_bahar": "سکه بهار آزادی",
-            "nim_sekke": "نیم سکه",
-            "rob_sekke": "ربع سکه",
-            "gerami": "سکه گرمی",
+        result = {
+            "success": True,
+            "data": {},
+            "updated": datetime.now().strftime("%H:%M:%S"),
         }
 
-        for slug, name in targets.items():
+        # پیدا کردن همه ردیف‌های جدول
+        rows = soup.select("tr")
+
+        keyword_map = {
+            "دلار": "دلار",
+            "یورو": "یورو",
+            "پوند": "پوند",
+            "درهم": "درهم امارات",
+            "لیر": "لیر ترکیه",
+            "یوان": "یوان چین",
+            "طلا 18": "طلای ۱۸ عیار",
+            "طلا 24": "طلای ۲۴ عیار",
+            "سکه امامی": "سکه امامی",
+            "نیم سکه": "نیم سکه",
+            "ربع سکه": "ربع سکه",
+            "سکه گرمی": "سکه گرمی",
+        }
+
+        for row in rows:
             try:
-                element = soup.select_one(f'[data-market-nameslug="{slug}"]')
-                if element:
-                    price_el = element.select_one(".info-price")
-                    if price_el:
-                        price_text = price_el.get_text(strip=True).replace(",", "")
-                        try:
-                            result["data"][name] = int(price_text)
-                        except ValueError:
-                            result["data"][name] = price_text
-            except Exception as e:
-                logger.warning(f"خطا در استخراج {slug}: {e}")
+                text = row.get_text(" ", strip=True)
+
+                for keyword, name in keyword_map.items():
+                    if keyword in text and name not in result["data"]:
+                        price_el = row.select_one(
+                            ".info-price, .price, [data-col='info-price'], td.nf"
+                        )
+                        if price_el:
+                            price_text = (
+                                price_el.get_text(strip=True)
+                                .replace(",", "")
+                                .replace("٫", "")
+                                .replace("٬", "")
+                            )
+                            try:
+                                result["data"][name] = int(price_text)
+                                break
+                            except ValueError:
+                                pass
+            except Exception:
+                continue
 
         if not result["data"]:
-            return {"success": False, "error": "اطلاعات TGJU استخراج نشد"}
+            return {"success": False, "error": "TGJU scrape داده نداد"}
 
-        _set_cache(cache_key, result)
         return result
     except Exception as e:
-        logger.warning(f"خطا در TGJU: {e}")
+        logger.warning(f"TGJU scrape خطا: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def _try_tgju_api() -> dict:
+    """TGJU API غیررسمی"""
+    try:
+        url = "https://api.tgju.org/v1/market/indicator/summary-table-data/price_dollar_rl"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        r = requests.get(url, headers=headers, timeout=TIMEOUT)
+        if r.status_code != 200:
+            return {"success": False}
+
+        try:
+            data = r.json()
+        except Exception:
+            return {"success": False}
+
+        result = {
+            "success": True,
+            "data": {},
+            "updated": datetime.now().strftime("%H:%M:%S"),
+        }
+
+        if isinstance(data, dict) and data.get("data"):
+            if isinstance(data["data"], list):
+                for item in data["data"]:
+                    if isinstance(item, dict):
+                        name = item.get("name") or item.get("title")
+                        price = item.get("price") or item.get("value")
+                        if name and price:
+                            try:
+                                result["data"][name] = int(
+                                    str(price).replace(",", "")
+                                )
+                            except ValueError:
+                                result["data"][name] = str(price)
+
+        if not result["data"]:
+            return {"success": False}
+
+        return result
+    except Exception as e:
+        logger.warning(f"TGJU API خطا: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -205,9 +351,7 @@ def get_iran_rates() -> dict:
 # 📅 تبدیل تاریخ
 # ============================================================
 def convert_date(date_str: str) -> dict:
-    """تبدیل تاریخ شمسی ↔ میلادی ↔ قمری"""
     try:
-        # تشخیص فرمت
         date_str = date_str.strip().replace("-", "/").replace(".", "/")
         parts = date_str.split("/")
 
@@ -216,18 +360,21 @@ def convert_date(date_str: str) -> dict:
 
         y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
 
-        # اگه سال < 1700 → شمسی
         if y < 1700:
             jalali = jdatetime.date(y, m, d)
             gregorian = jalali.togregorian()
-            hijri = Gregorian(gregorian.year, gregorian.month, gregorian.day).to_hijri()
+            hijri = Gregorian(
+                gregorian.year, gregorian.month, gregorian.day
+            ).to_hijri()
         else:
-            # میلادی
             gregorian = datetime(y, m, d).date()
             jalali = jdatetime.date.fromgregorian(date=gregorian)
             hijri = Gregorian(y, m, d).to_hijri()
 
-        weekdays_fa = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه"]
+        weekdays_fa = [
+            "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه",
+            "جمعه", "شنبه", "یکشنبه"
+        ]
         weekday = weekdays_fa[gregorian.weekday()]
 
         return {
@@ -245,11 +392,14 @@ def convert_date(date_str: str) -> dict:
 # 🧮 ماشین حساب
 # ============================================================
 def calculate(expression: str) -> dict:
-    """محاسبه ریاضی امن با sympy"""
     try:
-        # محدود کردن کاراکترها
         allowed = set("0123456789+-*/().^ %")
-        expr_clean = expression.replace("^", "**").replace("×", "*").replace("÷", "/")
+        expr_clean = (
+            expression
+            .replace("^", "**")
+            .replace("×", "*")
+            .replace("÷", "/")
+        )
 
         if not all(c in allowed for c in expr_clean):
             return {"success": False, "error": "عبارت شامل کاراکتر غیرمجاز"}
@@ -257,7 +407,6 @@ def calculate(expression: str) -> dict:
         result = sp.sympify(expr_clean)
         result_float = float(result)
 
-        # اگه عدد صحیح بود، بدون اعشار نشون بده
         if result_float.is_integer():
             result_str = str(int(result_float))
         else:

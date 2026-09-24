@@ -73,27 +73,42 @@ def finance_action(call):
         _show_iran(call, user_id)
     elif action == "date":
         set_state(user_id, waiting_for="fin_date")
-        bot.edit_message_text(
-            "📅 <b>تبدیل تاریخ</b>\n\n"
-            "تاریخ رو بفرست:\n\n"
-            "💡 مثال:\n"
-            "• <code>1403/06/15</code> (شمسی)\n"
-            "• <code>2024-09-05</code> (میلادی)",
-            call.message.chat.id, call.message.message_id,
-            parse_mode='HTML'
-        )
+        try:
+            bot.edit_message_text(
+                "📅 <b>تبدیل تاریخ</b>\n\n"
+                "تاریخ رو بفرست:\n\n"
+                "💡 مثال:\n"
+                "• <code>1403/06/15</code> (شمسی)\n"
+                "• <code>2024-09-05</code> (میلادی)",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML'
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "📅 <b>تبدیل تاریخ</b>\n\n"
+                "تاریخ رو بفرست:\n\n"
+                "💡 مثال: <code>1403/06/15</code>",
+                parse_mode='HTML'
+            )
     elif action == "calc":
         set_state(user_id, waiting_for="fin_calc")
-        bot.edit_message_text(
-            "🧮 <b>ماشین حساب</b>\n\n"
-            "عبارت ریاضی رو بفرست:\n\n"
-            "💡 مثال:\n"
-            "• <code>25 * 4 + 100</code>\n"
-            "• <code>2^10</code>\n"
-            "• <code>(15 + 5) / 4</code>",
-            call.message.chat.id, call.message.message_id,
-            parse_mode='HTML'
-        )
+        try:
+            bot.edit_message_text(
+                "🧮 <b>ماشین حساب</b>\n\n"
+                "عبارت ریاضی رو بفرست:\n\n"
+                "💡 مثال: <code>25 * 4 + 100</code>",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML'
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "🧮 <b>ماشین حساب</b>\n\n"
+                "عبارت ریاضی رو بفرست:\n\n"
+                "💡 مثال: <code>25 * 4 + 100</code>",
+                parse_mode='HTML'
+            )
 
 
 # ============================================================
@@ -109,12 +124,18 @@ def _crypto_menu(call, user_id: int):
     ]
     markup.add(*buttons)
 
-    bot.edit_message_text(
-        "💵 <b>ارز دیجیتال</b>\n\n"
-        "یه ارز انتخاب کن:",
-        call.message.chat.id, call.message.message_id,
-        parse_mode='HTML', reply_markup=markup
-    )
+    try:
+        bot.edit_message_text(
+            "💵 <b>ارز دیجیتال</b>\n\nیه ارز انتخاب کن:",
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML', reply_markup=markup
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id,
+            "💵 <b>ارز دیجیتال</b>\n\nیه ارز انتخاب کن:",
+            parse_mode='HTML', reply_markup=markup
+        )
 
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("crypto_"))
@@ -127,10 +148,16 @@ def crypto_chosen(call):
     info = get_crypto_price(symbol)
 
     if not info.get("success"):
-        bot.edit_message_text(
-            f"❌ خطا: {info.get('error', 'ناشناخته')}",
-            call.message.chat.id, call.message.message_id
-        )
+        try:
+            bot.edit_message_text(
+                f"❌ خطا: {info.get('error', 'ناشناخته')}",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                f"❌ خطا: {info.get('error', 'ناشناخته')}"
+            )
         return
 
     change = info["change_24h"]
@@ -159,35 +186,48 @@ def crypto_chosen(call):
         f"🕐 آخرین آپدیت: {info['updated']}"
     )
 
-    bot.edit_message_text(
-        text,
-        call.message.chat.id, call.message.message_id,
-        parse_mode='HTML'
-    )
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML'
+        )
+    except Exception:
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML')
+
     mark_user_used(user_id)
 
 
 # ============================================================
-# 💱 نرخ ارز (دلاری و تومانی)
+# 💱 نرخ ارز
 # ============================================================
 def _rates_menu(call, user_id: int):
+    """منوی انتخاب پایه نرخ ارز"""
+    set_state(user_id, waiting_for="rates_base")
+
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🌍 بر اساس دلار", callback_data="rates_usd"),
-        types.InlineKeyboardButton("🇮🇷 بر اساس تومان", callback_data="rates_irr"),
+        types.InlineKeyboardButton("🌍 بر اساس دلار", callback_data="ratesbase_usd"),
+        types.InlineKeyboardButton("🇮🇷 بر اساس تومان", callback_data="ratesbase_irr"),
     )
-    bot.edit_message_text(
-        "💱 <b>نرخ ارز</b>\n\n"
-        "نرخ‌ها رو بر اساس چی می‌خوای؟",
-        call.message.chat.id, call.message.message_id,
-        parse_mode='HTML', reply_markup=markup
-    )
+    try:
+        bot.edit_message_text(
+            "💱 <b>نرخ ارز</b>\n\nنرخ‌ها رو بر اساس چی می‌خوای؟",
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML', reply_markup=markup
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id,
+            "💱 <b>نرخ ارز</b>\n\nنرخ‌ها رو بر اساس چی می‌خوای؟",
+            parse_mode='HTML', reply_markup=markup
+        )
 
 
-@bot.callback_query_handler(func=lambda c: c.data in ["rates_usd", "rates_irr"])
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ratesbase_"))
 def rates_base_chosen(call):
     user_id = call.from_user.id
-    mode = call.data.replace("rates_", "")
+    mode = call.data.replace("ratesbase_", "")
 
     bot.answer_callback_query(call.id, "در حال دریافت...")
 
@@ -202,10 +242,16 @@ def _show_rates_usd(call, user_id: int):
     info = get_global_rates("USD")
 
     if not info.get("success"):
-        bot.edit_message_text(
-            f"❌ خطا: {info.get('error', 'ناشناخته')}",
-            call.message.chat.id, call.message.message_id
-        )
+        try:
+            bot.edit_message_text(
+                f"❌ خطا: {info.get('error', 'ناشناخته')}",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                f"❌ خطا: {info.get('error', 'ناشناخته')}"
+            )
         return
 
     text = "💱 <b>نرخ ارز (نسبت به دلار)</b>\n━━━━━━━━━━━━━━━\n\n"
@@ -218,40 +264,62 @@ def _show_rates_usd(call, user_id: int):
 
     text += f"\n🕐 {info.get('updated', '')}"
 
-    bot.edit_message_text(
-        text,
-        call.message.chat.id, call.message.message_id,
-        parse_mode='HTML'
-    )
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML'
+        )
+    except Exception:
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML')
+
     mark_user_used(user_id)
 
 
 def _show_rates_irr(call, user_id: int):
     """نرخ‌ها به تومان"""
-    # ۱) نرخ دلار به تومان از TGJU
     iran_info = get_iran_rates()
     if not iran_info.get("success"):
-        bot.edit_message_text(
-            f"❌ خطا در دریافت نرخ دلار: {iran_info.get('error', 'ناشناخته')}",
-            call.message.chat.id, call.message.message_id
-        )
+        try:
+            bot.edit_message_text(
+                "❌ خطا در دریافت نرخ دلار.\n"
+                "سرورهای ایرانی موقتاً در دسترس نیستن.\n\n"
+                "💡 دوباره تلاش کن.",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "❌ خطا در دریافت نرخ دلار. دوباره تلاش کن."
+            )
         return
 
     usd_rate = iran_info["data"].get("دلار")
     if not usd_rate:
-        bot.edit_message_text(
-            "❌ نرخ دلار از TGJU دریافت نشد.",
-            call.message.chat.id, call.message.message_id
-        )
+        try:
+            bot.edit_message_text(
+                "❌ نرخ دلار از سرور دریافت نشد. دوباره تلاش کن.",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "❌ نرخ دلار از سرور دریافت نشد."
+            )
         return
 
-    # ۲) نرخ‌های جهانی نسبت به دلار
     global_info = get_global_rates("USD")
     if not global_info.get("success"):
-        bot.edit_message_text(
-            f"❌ خطا در دریافت نرخ جهانی: {global_info.get('error', 'ناشناخته')}",
-            call.message.chat.id, call.message.message_id
-        )
+        try:
+            bot.edit_message_text(
+                f"❌ خطا در دریافت نرخ جهانی: {global_info.get('error', 'ناشناخته')}",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                f"❌ خطا در نرخ جهانی"
+            )
         return
 
     rates = global_info["rates"]
@@ -262,24 +330,24 @@ def _show_rates_irr(call, user_id: int):
         f"💵 <b>دلار پایه:</b> {usd_rate:,} تومان\n\n"
     )
 
-    # ۳) تبدیل هر ارز به تومان
     for code in ["EUR", "GBP", "AED", "TRY", "CNY", "RUB", "CAD", "AUD", "JPY"]:
         rate_vs_usd = rates.get(code)
         if rate_vs_usd:
-            # ۱ دلار = usd_rate تومان
-            # ۱ code = (1/rate_vs_usd) دلار
-            # ۱ code = usd_rate / rate_vs_usd تومان
             toman_price = usd_rate / rate_vs_usd
             name = CURRENCY_NAMES.get(code, code)
             text += f"{name}: <code>{toman_price:,.0f}</code> تومان\n"
 
     text += f"\n🕐 {iran_info.get('updated', '')}"
 
-    bot.edit_message_text(
-        text,
-        call.message.chat.id, call.message.message_id,
-        parse_mode='HTML'
-    )
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML'
+        )
+    except Exception:
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML')
+
     mark_user_used(user_id)
 
 
@@ -292,10 +360,17 @@ def _show_iran(call, user_id: int):
     info = get_iran_rates()
 
     if not info.get("success"):
-        bot.edit_message_text(
-            f"❌ خطا: {info.get('error', 'ناشناخته')}",
-            call.message.chat.id, call.message.message_id
-        )
+        try:
+            bot.edit_message_text(
+                f"❌ خطا: {info.get('error', 'ناشناخته')}\n\n"
+                f"سرورهای ایرانی موقتاً در دسترس نیستن. دوباره تلاش کن.",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                f"❌ خطا: {info.get('error', 'ناشناخته')}"
+            )
         return
 
     data = info["data"]
@@ -309,11 +384,15 @@ def _show_iran(call, user_id: int):
 
     text += f"\n🕐 {info.get('updated', '')}"
 
-    bot.edit_message_text(
-        text,
-        call.message.chat.id, call.message.message_id,
-        parse_mode='HTML'
-    )
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML'
+        )
+    except Exception:
+        bot.send_message(call.message.chat.id, text, parse_mode='HTML')
+
     mark_user_used(user_id)
 
 
