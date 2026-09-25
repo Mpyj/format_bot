@@ -82,6 +82,49 @@ def fun_action(call):
     user_id = call.from_user.id
     action = call.data.replace("fun_", "")
 
+    # 👇 اول back رو چک کن
+    if action == "back":
+        bot.answer_callback_query(call.id)
+        clear_state(user_id)
+        set_state(user_id, mode="fun", waiting_for=None)
+        try:
+            bot.edit_message_text(
+                "🎮 <b>سرگرمی</b>\n\nیه گزینه انتخاب کن:",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=_fun_menu(user_id)
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id,
+                "🎮 <b>سرگرمی</b>",
+                parse_mode='HTML', reply_markup=_fun_menu(user_id)
+            )
+        return
+
+    # 👇 نمایش پاسخ معما
+    if action == "riddle_show":
+        state = get_state(user_id)
+        answer = state.get("fun_riddle_answer", "?")
+        question = state.get("fun_riddle_question", "?")
+
+        bot.answer_callback_query(call.id)
+        try:
+            bot.edit_message_text(
+                f"🧩 <b>معما</b>\n━━━━━━━━━━━━━━━\n\n"
+                f"❓ {question}\n\n"
+                f"✅ <b>پاسخ:</b> {answer}",
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML',
+                reply_markup=types.InlineKeyboardMarkup(row_width=2).add(
+                    types.InlineKeyboardButton("🧩 معما بعدی", callback_data="fun_riddle"),
+                    types.InlineKeyboardButton("🔙 بازگشت", callback_data="fun_back"),
+                )
+            )
+        except Exception:
+            pass
+        return
+
+    # 👇 بستن
     if action == "close":
         clear_state(user_id)
         bot.answer_callback_query(call.id, "بسته شد")
@@ -149,8 +192,7 @@ def fun_action(call):
                     "🎯 <b>قرعه‌کشی</b>\n\n"
                     "گزینه‌ها رو با کاما (,) یا خط جدید جدا کن.\n\n"
                     "💡 مثال:\n"
-                    "<code>علی، رضا، سارا، مریم</code>\n\n"
-                    "یا هر خط یه گزینه.",
+                    "<code>علی، رضا، سارا، مریم</code>",
                     call.message.chat.id, call.message.message_id,
                     parse_mode='HTML',
                     reply_markup=types.InlineKeyboardMarkup().add(
@@ -181,7 +223,10 @@ def fun_action(call):
             else:
                 bot.edit_message_text(
                     "❌ خطا در دریافت جوک.",
-                    call.message.chat.id, call.message.message_id
+                    call.message.chat.id, call.message.message_id,
+                    reply_markup=types.InlineKeyboardMarkup().add(
+                        types.InlineKeyboardButton("🔙 بازگشت", callback_data="fun_back"),
+                    )
                 )
 
         elif action == "hafez":
@@ -209,31 +254,31 @@ def fun_action(call):
             else:
                 bot.edit_message_text(
                     "❌ خطا در گرفتن فال.",
-                    call.message.chat.id, call.message.message_id
+                    call.message.chat.id, call.message.message_id,
+                    reply_markup=types.InlineKeyboardMarkup().add(
+                        types.InlineKeyboardButton("🔙 بازگشت", callback_data="fun_back"),
+                    )
                 )
 
         elif action == "riddle":
             result = get_riddle()
-            # پاسخ رو مخفی نگه دار — کاربر روی دکمه بزنه
-            set_state(user_id, fun_riddle_answer=result["answer"])
+            # پاسخ رو ذخیره کن
+            set_state(user_id, fun_riddle_answer=result["answer"],
+                      fun_riddle_question=result["question"])
 
             bot.edit_message_text(
                 f"🧩 <b>معما</b>\n━━━━━━━━━━━━━━━\n\n"
-                f"{result['question']}",
+                f"❓ {result['question']}\n\n"
+                f"💡 <i>می‌تونی پاسخ رو ببینی یا معمای بعدی رو بزنی.</i>",
                 call.message.chat.id, call.message.message_id,
                 parse_mode='HTML',
                 reply_markup=types.InlineKeyboardMarkup(row_width=2).add(
-                    types.InlineKeyboardButton("👁 نمایش پاسخ", callback_data="fun_riddle_answer"),
-                    types.InlineKeyboardButton("🧩 بعدی", callback_data="fun_riddle"),
+                    types.InlineKeyboardButton("👁 نمایش پاسخ", callback_data="fun_riddle_show"),
+                    types.InlineKeyboardButton("🧩 معما بعدی", callback_data="fun_riddle"),
                     types.InlineKeyboardButton("🔙 بازگشت", callback_data="fun_back"),
                 )
             )
             mark_user_used(user_id)
-
-        elif action == "riddle_answer":
-            state = get_state(user_id)
-            answer = state.get("fun_riddle_answer", "?")
-            bot.answer_callback_query(call.id, f"پاسخ: {answer}", show_alert=True)
 
         elif action == "motivation":
             msg = get_motivation()
@@ -302,30 +347,6 @@ def fun_action(call):
     except Exception as e:
         logger.exception("خطا در سرگرمی")
         bot.send_message(call.message.chat.id, f"❌ خطا: {e}")
-
-
-# ============================================================
-# 🔙 بازگشت به منوی سرگرمی
-# ============================================================
-@bot.callback_query_handler(func=lambda c: c.data == "fun_back")
-def fun_back(call):
-    user_id = call.from_user.id
-    clear_state(user_id)
-    set_state(user_id, mode="fun", waiting_for=None)
-
-    bot.answer_callback_query(call.id)
-    try:
-        bot.edit_message_text(
-            "🎮 <b>سرگرمی</b>\n\nیه گزینه انتخاب کن:",
-            call.message.chat.id, call.message.message_id,
-            parse_mode='HTML', reply_markup=_fun_menu(user_id)
-        )
-    except Exception:
-        bot.send_message(
-            call.message.chat.id,
-            "🎮 <b>سرگرمی</b>",
-            parse_mode='HTML', reply_markup=_fun_menu(user_id)
-        )
 
 
 # ============================================================
