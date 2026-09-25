@@ -20,8 +20,10 @@ def main():
 
     from handlers import (  # noqa
         start, image, ocr, archive, site, network, finance, text_tools,
-        media, advanced_media, advanced_image, pdf, creativity,
-        fun, downloader, song_recognition, admin, middleware
+        media, advanced_media, advanced_image,
+        pdf, pdf_advanced,
+        creativity, fun, downloader, song_recognition,
+        admin, middleware
     )
 
     bot.remove_webhook()

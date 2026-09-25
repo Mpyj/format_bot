@@ -37,8 +37,10 @@ async def lifespan(app: FastAPI):
     # ۳) ایمپورت هندلرها
     from handlers import (  # noqa
         start, image, ocr, archive, site, network, finance, text_tools,
-        media, advanced_media, advanced_image, pdf, creativity,
-        fun, downloader, song_recognition, admin, middleware
+        media, advanced_media, advanced_image,
+        pdf, pdf_advanced,
+        creativity, fun, downloader, song_recognition,
+        admin, middleware
     )
 
     # ۴) ست کردن وبهوک
@@ -89,4 +91,3 @@ async def webhook(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)
-    
