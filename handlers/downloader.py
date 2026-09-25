@@ -1,5 +1,4 @@
 import os
-import re
 import logging
 from telebot import types
 
@@ -8,7 +7,7 @@ from config import TEMP_DIR
 from utils.cleanup import delete_file
 from utils.states import set_state, get_state, clear_state, is_menu_button
 from utils.downloader import (
-    get_info, download_video, download_audio,
+    get_info, download_video, download_audio, download_soundcloud,
     human_size, format_duration,
 )
 from utils.keyboards import main_menu_keyboard
@@ -112,7 +111,6 @@ def dl_action(call):
 
     bot.answer_callback_query(call.id)
 
-    # راهنماها
     hints = {
         "youtube": "🎬 <b>یوتیوب</b>\n\nلینک ویدیو رو بفرست:",
         "instagram": "📷 <b>اینستاگرام</b>\n\nلینک پست/رئیلز رو بفرست:",
@@ -161,7 +159,6 @@ def dl_receive_url(message):
     user_id = message.from_user.id
     url = message.text.strip()
 
-    # چک لینک
     if not url.startswith(("http://", "https://")):
         bot.send_message(
             message.chat.id,
@@ -181,14 +178,12 @@ def dl_receive_url(message):
             f"❌ {info.get('error', 'نتونستم اطلاعات بگیرم')}\n\n"
             f"💡 ممکنه:\n"
             f"• لینک اشتباه باشه\n"
-            f"• پلتفرم پشتیبانی نشه\n"
-            f"• IP سرور بلاک شده باشه",
+            f"• پلتفرم پشتیبانی نشه",
             reply_markup=main_menu_keyboard(user_id)
         )
         clear_state(user_id)
         return
 
-    # نمایش اطلاعات
     text = (
         f"📊 <b>اطلاعات</b>\n"
         f"━━━━━━━━━━━━━━━\n\n"
@@ -241,17 +236,29 @@ def dl_quality_chosen(call):
 
     bot.answer_callback_query(call.id, "شروع دانلود...")
 
-    if quality == "audio":
+    is_soundcloud = "soundcloud.com" in url.lower()
+
+    # 🎧 SoundCloud
+    if is_soundcloud:
         bot.edit_message_text(
-            "⏳ در حال دانلود صدا (MP3)...\n\n"
+            "⏳ در حال دانلود از SoundCloud...\n\n"
             "ممکنه چند ثانیه طول بکشه.",
             call.message.chat.id, call.message.message_id
         )
+        output = download_soundcloud(url)
+
+    # 🎵 فقط صدا
+    elif quality == "audio":
+        bot.edit_message_text(
+            "⏳ در حال دانلود صدا (MP3)...",
+            call.message.chat.id, call.message.message_id
+        )
         output = download_audio(url)
+
+    # 🎬 ویدیو
     else:
         bot.edit_message_text(
-            f"⏳ در حال دانلود ویدیو ({quality}p)...\n\n"
-            "ممکنه چند ثانیه طول بکشه.",
+            f"⏳ در حال دانلود ویدیو ({quality}p)...",
             call.message.chat.id, call.message.message_id
         )
         output = download_video(url, quality)
@@ -287,8 +294,8 @@ def dl_quality_chosen(call):
             "❌ دانلود ناموفق بود.\n\n"
             "💡 دلایل احتمالی:\n"
             "• حجم فایل > ۴۸MB\n"
-            "• IP سرور بلاک شده\n"
-            "• لینک خصوصی/حذف شده",
+            "• لینک خصوصی/حذف شده\n"
+            "• مشکل موقت در سرویس",
             reply_markup=main_menu_keyboard(user_id)
         )
 
