@@ -12,5 +12,7 @@ from . import advanced_image
 from . import pdf
 from . import creativity
 from . import fun
+from . import downloader
+from . import song_recognition
 from . import admin
 from . import middleware

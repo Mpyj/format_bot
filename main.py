@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     from handlers import (  # noqa
         start, image, ocr, archive, site, network, finance, text_tools,
         media, advanced_media, advanced_image, pdf, creativity,
-        fun, admin, middleware
+        fun, downloader, song_recognition, admin, middleware
     )
 
     # ۴) ست کردن وبهوک

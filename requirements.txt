@@ -26,3 +26,5 @@ lxml
 pyfiglet
 matplotlib
 numpy
+yt-dlp
+shazamio
