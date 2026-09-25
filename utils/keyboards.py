@@ -4,7 +4,6 @@ from config import ADMIN_ID
 
 def main_menu_keyboard(user_id: int = None, page: int = None):
     """کیبورد اصلی — صفحه‌بندی شده"""
-    # اگه page پاس نشد، از state بخون
     if page is None:
         if user_id:
             from utils.states import get_state
@@ -24,8 +23,8 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('💰 ابزار مالی'),
             types.KeyboardButton('🛠 ابزار متنی'),
             types.KeyboardButton('📱 ساخت QR Code'),
-            types.KeyboardButton('📥 دانلودر'),        # 👈 اومد صفحه ۱
-            types.KeyboardButton('🎵 تشخیص آهنگ'),    # 👈 اومد صفحه ۱
+            types.KeyboardButton('📥 دانلودر'),
+            types.KeyboardButton('🎵 تشخیص آهنگ'),
         )
         markup.add(
             types.KeyboardButton('📄 صفحه ۲ ➡️'),
@@ -42,6 +41,7 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('🎬 مدیا پیشرفته'),
             types.KeyboardButton('🎨 تصویر پیشرفته'),
             types.KeyboardButton('📄 ابزار PDF'),
+            types.KeyboardButton('📑 PDF پیشرفته'),      # 👈 اضافه شد
             types.KeyboardButton('🎨 جعبه خلاقیت'),
             types.KeyboardButton('🎮 سرگرمی'),
         )
