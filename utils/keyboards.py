@@ -24,6 +24,8 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('💰 ابزار مالی'),
             types.KeyboardButton('🛠 ابزار متنی'),
             types.KeyboardButton('📱 ساخت QR Code'),
+            types.KeyboardButton('📥 دانلودر'),        # 👈 اومد صفحه ۱
+            types.KeyboardButton('🎵 تشخیص آهنگ'),    # 👈 اومد صفحه ۱
         )
         markup.add(
             types.KeyboardButton('📄 صفحه ۲ ➡️'),
@@ -42,8 +44,6 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('📄 ابزار PDF'),
             types.KeyboardButton('🎨 جعبه خلاقیت'),
             types.KeyboardButton('🎮 سرگرمی'),
-            types.KeyboardButton('📥 دانلودر'),
-            types.KeyboardButton('🎵 تشخیص آهنگ'),
         )
         markup.add(
             types.KeyboardButton('⬅️ صفحه ۱'),

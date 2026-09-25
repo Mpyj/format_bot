@@ -28,7 +28,9 @@ def song_rec_start(message):
         "🎵 <b>تشخیص آهنگ</b>\n\n"
         "یه فایل صوتی یا ویدیو بفرست تا آهنگش رو تشخیص بدم.\n\n"
         "🎤 از Shazam استفاده می‌کنم.\n\n"
-        "💡 بهترین نتیجه با ۱۰-۳۰ ثانیه از آهنگ.",
+        "💡 بهترین نتیجه با ۱۰-۳۰ ثانیه از آهنگ.\n"
+        "💡 اگه آهنگ پیدا شد، لینک SoundCloud هم می‌دم\n"
+        "   که بتونی از دانلودر دانلودش کنی.",
         parse_mode='HTML'
     )
 
@@ -81,6 +83,13 @@ def song_receive_audio(message):
                 text += f"📅 <b>سال:</b> {result['year']}\n"
             if result.get("genre") and result["genre"] != "?":
                 text += f"🎨 <b>سبک:</b> {result['genre']}\n"
+
+            # 🎧 لینک SoundCloud
+            if result.get("soundcloud_url"):
+                text += f"\n🎧 <a href='{result['soundcloud_url']}'>جستجو در SoundCloud</a>\n"
+                text += f"<i>(لینک آهنگ رو کپی کن و توی 📥 دانلودر بذار)</i>\n"
+
+            # 🔗 لینک Shazam
             if result.get("url"):
                 text += f"\n🔗 <a href='{result['url']}'>مشاهده در Shazam</a>"
 
@@ -105,7 +114,7 @@ def song_receive_audio(message):
                 f"❌ {result.get('error', 'تشخیص ناموفق بود')}\n\n"
                 f"💡 دلایل احتمالی:\n"
                 f"• آهنگ ناشناخته\n"
-                f"• کیفیت پایین\n"
+                f"• کیفیت پایین صدا\n"
                 f"• سرور Shazam در دسترس نیست",
                 reply_markup=main_menu_keyboard(user_id)
             )
