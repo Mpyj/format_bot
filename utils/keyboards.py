@@ -30,6 +30,10 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('ℹ️ راهنما'),
         )
 
+        # 👑 دکمه ادمین فقط توی صفحه ۱ و فقط برای ادمین
+        if user_id and user_id == ADMIN_ID:
+            markup.add(types.KeyboardButton('👑 پنل ادمین'))
+
     elif page == 2:
         markup.add(
             types.KeyboardButton('🎵 مبدل مدیا'),
@@ -43,10 +47,6 @@ def main_menu_keyboard(user_id: int = None, page: int = None):
             types.KeyboardButton('⬅️ صفحه ۱'),
             types.KeyboardButton('ℹ️ راهنما'),
         )
-
-    # 👑 دکمه ادمین فقط برای ادمین
-    if user_id and user_id == ADMIN_ID:
-        markup.add(types.KeyboardButton('👑 پنل ادمین'))
 
     return markup
 
