@@ -4,7 +4,8 @@ uvicorn[standard]
 Pillow
 pytesseract
 python-dotenv
-sqlalchemy
+sqlalchemy[asyncio]
+greenlet
 asyncpg
 psycopg2-binary
 qrcode[pil]
