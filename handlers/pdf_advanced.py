@@ -53,7 +53,7 @@ def _back_markup():
 # ============================================================
 # شروع
 # ============================================================
-@bot.message_handler(func=lambda m: m.text == '📄 PDF پیشرفته')
+@bot.message_handler(func=lambda m: m.text == '📑 PDF پیشرفته')
 def pdf_adv_start(message):
     user_id = message.from_user.id
     clear_state(user_id)

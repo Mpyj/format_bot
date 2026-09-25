@@ -10,7 +10,7 @@ from . import media
 from . import advanced_media
 from . import advanced_image
 from . import pdf
-from . import pdf_advanced      # 👈 این خط باید باشه
+from . import pdf_advanced      # 👈 این باید باشه
 from . import creativity
 from . import fun
 from . import downloader
