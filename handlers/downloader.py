@@ -7,7 +7,7 @@ from config import TEMP_DIR
 from utils.cleanup import delete_file
 from utils.states import set_state, get_state, clear_state, is_menu_button
 from utils.downloader import (
-    get_info, download_video, download_audio, download_soundcloud,
+    get_info, download_video, download_audio,
     human_size, format_duration,
 )
 from utils.keyboards import main_menu_keyboard
@@ -30,15 +30,12 @@ def _downloader_menu(user_id: int = None):
         types.InlineKeyboardButton("🐦 توییتر (X)", callback_data="dl_twitter"),
     )
     markup.add(
-        types.InlineKeyboardButton("🎧 SoundCloud", callback_data="dl_soundcloud"),
         types.InlineKeyboardButton("📘 فیسبوک", callback_data="dl_facebook"),
-    )
-    markup.add(
         types.InlineKeyboardButton("🎥 Vimeo", callback_data="dl_vimeo"),
-        types.InlineKeyboardButton("📌 Pinterest", callback_data="dl_pinterest"),
     )
     markup.add(
-        types.InlineKeyboardButton("🔗 هر لینک دیگه", callback_data="dl_auto"),
+        types.InlineKeyboardButton("📌 Pinterest", callback_data="dl_pinterest"),
+        types.InlineKeyboardButton("🔗 هر لینک", callback_data="dl_auto"),
     )
     markup.add(types.InlineKeyboardButton("❌ بستن", callback_data="dl_close"))
     return markup
@@ -59,8 +56,8 @@ def downloader_start(message):
         "لینک از کدوم پلتفرم؟\n\n"
         "🎬 یوتیوب — 📷 اینستاگرام\n"
         "🎵 تیک‌تاک — 🐦 توییتر (X)\n"
-        "🎧 SoundCloud — 📘 فیسبوک\n"
-        "🎥 Vimeo — 📌 Pinterest\n\n"
+        "📘 فیسبوک — 🎥 Vimeo\n"
+        "📌 Pinterest — 🔗 هر لینک دیگه\n\n"
         "💡 حداکثر حجم: ۴۸ مگابایت",
         parse_mode='HTML',
         reply_markup=_downloader_menu(user_id)
@@ -75,7 +72,6 @@ def dl_action(call):
     user_id = call.from_user.id
     action = call.data.replace("dl_", "")
 
-    # 🔙 back
     if action == "back":
         bot.answer_callback_query(call.id)
         clear_state(user_id)
@@ -94,7 +90,6 @@ def dl_action(call):
             )
         return
 
-    # ❌ بستن
     if action == "close":
         clear_state(user_id)
         bot.answer_callback_query(call.id, "بسته شد")
@@ -116,7 +111,6 @@ def dl_action(call):
         "instagram": "📷 <b>اینستاگرام</b>\n\nلینک پست/رئیلز رو بفرست:",
         "tiktok": "🎵 <b>تیک‌تاک</b>\n\nلینک ویدیو رو بفرست:",
         "twitter": "🐦 <b>توییتر (X)</b>\n\nلینک توییت رو بفرست:",
-        "soundcloud": "🎧 <b>SoundCloud</b>\n\nلینک آهنگ رو بفرست:",
         "facebook": "📘 <b>فیسبوک</b>\n\nلینک ویدیو رو بفرست:",
         "vimeo": "🎥 <b>Vimeo</b>\n\nلینک ویدیو رو بفرست:",
         "pinterest": "📌 <b>Pinterest</b>\n\nلینک پین رو بفرست:",
@@ -167,7 +161,6 @@ def dl_receive_url(message):
         return
 
     set_state(user_id, dl_url=url, waiting_for="dl_quality")
-
     bot.send_message(message.chat.id, "⏳ در حال دریافت اطلاعات...")
 
     info = get_info(url)
@@ -236,26 +229,12 @@ def dl_quality_chosen(call):
 
     bot.answer_callback_query(call.id, "شروع دانلود...")
 
-    is_soundcloud = "soundcloud.com" in url.lower()
-
-    # 🎧 SoundCloud
-    if is_soundcloud:
-        bot.edit_message_text(
-            "⏳ در حال دانلود از SoundCloud...\n\n"
-            "ممکنه چند ثانیه طول بکشه.",
-            call.message.chat.id, call.message.message_id
-        )
-        output = download_soundcloud(url)
-
-    # 🎵 فقط صدا
-    elif quality == "audio":
+    if quality == "audio":
         bot.edit_message_text(
             "⏳ در حال دانلود صدا (MP3)...",
             call.message.chat.id, call.message.message_id
         )
         output = download_audio(url)
-
-    # 🎬 ویدیو
     else:
         bot.edit_message_text(
             f"⏳ در حال دانلود ویدیو ({quality}p)...",
@@ -283,7 +262,6 @@ def dl_quality_chosen(call):
                         parse_mode='HTML',
                         supports_streaming=True,
                     )
-
             mark_user_used(user_id)
         except Exception as e:
             logger.exception("خطا در ارسال")

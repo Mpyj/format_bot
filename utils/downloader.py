@@ -1,5 +1,4 @@
 import os
-import re
 import uuid
 import logging
 import subprocess
@@ -16,10 +15,7 @@ MAX_SIZE_MB = 48
 # 🔍 اطلاعات لینک
 # ============================================================
 def get_info(url: str) -> dict:
-    """اطلاعات ویدیو/آهنگ رو از لینک می‌گیره"""
     try:
-        url = _normalize_soundcloud_url(url)
-
         result = subprocess.run(
             [
                 "yt-dlp",
@@ -35,8 +31,7 @@ def get_info(url: str) -> dict:
         )
 
         if result.returncode != 0:
-            error = result.stderr[:500]
-            logger.warning(f"yt-dlp error: {error}")
+            logger.warning(f"yt-dlp error: {result.stderr[:500]}")
             return {"success": False, "error": "نتونستم اطلاعات بگیرم"}
 
         import json
@@ -62,24 +57,11 @@ def get_info(url: str) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def _normalize_soundcloud_url(url: str) -> str:
-    """لینک کوتاه SoundCloud رو باز می‌کنه"""
-    if "soundcloud.app.goo.gl" in url or "on.soundcloud.com" in url:
-        try:
-            r = requests.head(url, allow_redirects=True, timeout=15)
-            logger.info(f"لینک کوتاه باز شد: {r.url}")
-            return r.url
-        except Exception:
-            pass
-    return url
-
-
 # ============================================================
 # 🎬 دانلود ویدیو
 # ============================================================
 def download_video(url: str, quality: str = "720") -> str | None:
     try:
-        url = _normalize_soundcloud_url(url)
         output_template = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}.%(ext)s")
 
         if quality == "1080":
@@ -131,7 +113,6 @@ def download_video(url: str, quality: str = "720") -> str | None:
 # ============================================================
 def download_audio(url: str) -> str | None:
     try:
-        url = _normalize_soundcloud_url(url)
         output_template = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}.%(ext)s")
 
         result = subprocess.run(
@@ -171,17 +152,15 @@ def download_audio(url: str) -> str | None:
 
 
 # ============================================================
-# 🎧 SoundCloud — دانلود
+# 🔍 جستجو و دانلود از YouTube (برای تشخیص آهنگ)
 # ============================================================
-def download_soundcloud(url: str) -> str | None:
-    """دانلود از SoundCloud با yt-dlp"""
+def search_and_download_audio(query: str) -> str | None:
+    """
+    یه query می‌گیره، از YouTube جستجو می‌کنه و بهترین نتیجه رو دانلود می‌کنه.
+    """
     try:
-        url = _normalize_soundcloud_url(url)
-
-        # لینک جستجو رو فیلتر کن
-        if "/search" in url or "search?q=" in url:
-            logger.warning("لینک جستجو پشتیبانی نمی‌شه")
-            return None
+        # ytsearch1: یعنی اولین نتیجه جستجو
+        search_url = f"ytsearch1:{query}"
 
         output_template = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}.%(ext)s")
 
@@ -196,7 +175,7 @@ def download_soundcloud(url: str) -> str | None:
                 "--audio-quality", "0",
                 "-o", output_template,
                 "--max-filesize", f"{MAX_SIZE_MB}M",
-                url,
+                search_url,
             ],
             capture_output=True,
             text=True,
@@ -204,7 +183,7 @@ def download_soundcloud(url: str) -> str | None:
         )
 
         if result.returncode != 0:
-            logger.warning(f"SoundCloud yt-dlp error: {result.stderr[:500]}")
+            logger.warning(f"yt-dlp search error: {result.stderr[:500]}")
             return None
 
         base = output_template.replace(".%(ext)s", "")
@@ -214,10 +193,10 @@ def download_soundcloud(url: str) -> str | None:
 
         return None
     except subprocess.TimeoutExpired:
-        logger.warning("Timeout در دانلود SoundCloud")
+        logger.warning("Timeout در جستجو و دانلود")
         return None
     except Exception as e:
-        logger.exception(f"خطا در دانلود SoundCloud: {e}")
+        logger.exception(f"خطا در جستجو و دانلود: {e}")
         return None
 
 
