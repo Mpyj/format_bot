@@ -4,7 +4,7 @@ import logging
 from telebot import types
 
 from main import bot
-from config import ADMIN_ID, TEMP_DIR
+from config import ADMIN_ID, TEMP_DIR, CHANNEL_ID, CHANNEL_LINK
 from utils.cleanup import delete_file
 from utils.states import set_state, get_state, clear_state
 from utils.admin_tools import (
@@ -24,12 +24,6 @@ def is_admin(user_id: int) -> bool:
 
 # ---------- پنل ادمین ----------
 def admin_panel(message, edit: bool = False, user_id: int = None):
-    """
-    پنل ادمین.
-    - edit=True: پیام فعلی رو ویرایش می‌کنه
-    - user_id: اگه داده بشه، به جای message.from_user چک می‌کنه
-              (چون توی callback، message.from_user = bot هست)
-    """
     check_id = user_id if user_id is not None else message.from_user.id
 
     if not is_admin(check_id):
@@ -57,20 +51,20 @@ def admin_panel(message, edit: bool = False, user_id: int = None):
         types.InlineKeyboardButton("📥 CSV کاربران", callback_data="adm_csv_users"),
         types.InlineKeyboardButton("📥 CSV عملیات", callback_data="adm_csv_ops"),
     )
+    markup.add(
+        types.InlineKeyboardButton("🔍 اطلاعات کانال", callback_data="adm_channel_info"),
+    )
     markup.add(types.InlineKeyboardButton("❌ بستن", callback_data="adm_close"))
 
     if edit:
         try:
             bot.edit_message_text(
-                text,
-                message.chat.id,
-                message.message_id,
-                parse_mode='HTML',
-                reply_markup=markup
+                text, message.chat.id, message.message_id,
+                parse_mode='HTML', reply_markup=markup
             )
             return
         except Exception as e:
-            logger.warning(f"edit نشد، send می‌کنیم: {e}")
+            logger.warning(f"edit نشد: {e}")
 
     bot.send_message(message.chat.id, text, parse_mode='HTML', reply_markup=markup)
 
@@ -84,7 +78,6 @@ def admin_callback(call):
 
     action = call.data.replace("adm_", "")
 
-    # ❌ بستن
     if action == "close":
         bot.answer_callback_query(call.id, "بسته شد")
         try:
@@ -93,22 +86,19 @@ def admin_callback(call):
             pass
         return
 
-    # 🔙 بازگشت
     if action == "back":
-        logger.info(f"🔙 back pressed by {call.from_user.id}")
         bot.answer_callback_query(call.id)
         admin_panel(call.message, edit=True, user_id=call.from_user.id)
         return
 
-    # 📊 آمار
     if action == "stats":
         _show_stats(call)
     elif action == "top":
         _show_top(call)
     elif action == "ops":
         _show_ops(call)
-
-    # 👤 جستجوی کاربر
+    elif action == "channel_info":
+        _show_channel_info(call)
     elif action == "find_user":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_find_user")
@@ -118,35 +108,24 @@ def admin_callback(call):
             "آیدی عددی یا یوزرنیم کاربر رو بفرست:\n\n"
             "💡 مثال:\n"
             "• <code>7144847927</code>\n"
-            "• <code>@username</code>\n"
-            "• <code>username</code>"
+            "• <code>@username</code>"
         )
-
-    # 📢 پیام همگانی
     elif action == "broadcast":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_broadcast")
         _edit_with_back(
             call,
             "📢 <b>پیام همگانی</b>\n\n"
-            "متن پیام رو بفرست تا به همه کاربرا ارسال بشه.\n\n"
-            "⚠️ این کار ممکنه چند دقیقه طول بکشه."
+            "متن پیام رو بفرست تا به همه کاربرا ارسال بشه."
         )
-
-    # 🚫 بن/آنبن
     elif action == "ban":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_ban_user")
         _edit_with_back(
             call,
             "🚫 <b>بن/آنبن</b>\n\n"
-            "آیدی عددی یا یوزرنیم کاربر رو بفرست:\n\n"
-            "💡 مثال:\n"
-            "• <code>7144847927</code>\n"
-            "• <code>@username</code>"
+            "آیدی عددی یا یوزرنیم کاربر رو بفرست:"
         )
-
-    # 📥 CSV
     elif action == "csv_users":
         _export_csv(call, "users")
     elif action == "csv_ops":
@@ -154,16 +133,12 @@ def admin_callback(call):
 
 
 def _edit_with_back(call, text: str):
-    """ویرایش پیام + دکمه بازگشت"""
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adm_back"))
     try:
         bot.edit_message_text(
-            text,
-            call.message.chat.id,
-            call.message.message_id,
-            parse_mode='HTML',
-            reply_markup=markup
+            text, call.message.chat.id, call.message.message_id,
+            parse_mode='HTML', reply_markup=markup
         )
     except Exception:
         bot.send_message(
@@ -252,8 +227,129 @@ def _op_name_fa(op_type: str) -> str:
         "pdf_compress": "📉 فشرده‌سازی PDF",
         "pdf_watermark": "💧 واترمارک PDF",
         "pdf_img2pdf": "📄 عکس به PDF",
+        "download": "📥 دانلود",
+        "song_recognition": "🎵 تشخیص آهنگ",
     }
     return mapping.get(op_type, op_type)
+
+
+# ============================================================
+# 🔍 اطلاعات کانال
+# ============================================================
+def _show_channel_info(call):
+    bot.answer_callback_query(call.id, "در حال بررسی...")
+
+    lines = [
+        "🔍 <b>اطلاعات کانال و بات</b>",
+        "━━━━━━━━━━━━━━━\n",
+    ]
+
+    # ۱) آیدی کانال
+    if CHANNEL_ID and CHANNEL_ID != 0:
+        lines.append(f"📢 <b>Channel ID:</b> <code>{CHANNEL_ID}</code>")
+    else:
+        lines.append("❌ <b>Channel ID:</b> <code>ست نشده!</code>")
+
+    # ۲) لینک کانال
+    if CHANNEL_LINK:
+        lines.append(f"🔗 <b>Channel Link:</b> {CHANNEL_LINK}")
+    else:
+        lines.append("❌ <b>Channel Link:</b> خالی")
+
+    lines.append("━━━━━━━━━━━━━━━")
+
+    # ۳) وضعیت بات توی کانال
+    if CHANNEL_ID and CHANNEL_ID != 0:
+        try:
+            chat = bot.get_chat(CHANNEL_ID)
+            lines.append(f"✅ <b>کانال:</b> {chat.title}")
+
+            try:
+                bot_member = bot.get_chat_member(CHANNEL_ID, bot.get_me().id)
+                bot_status = bot_member.status
+
+                if bot_status == "administrator":
+                    lines.append(f"👑 <b>وضعیت بات:</b> ادمین ✅")
+                elif bot_status == "creator":
+                    lines.append(f"👑 <b>وضعیت بات:</b> سازنده ✅")
+                elif bot_status == "member":
+                    lines.append(f"⚠️ <b>وضعیت بات:</b> عضو عادی (ادمین نیست!)")
+                else:
+                    lines.append(f"⚠️ <b>وضعیت بات:</b> {bot_status}")
+
+            except Exception as e:
+                lines.append(f"❌ <b>خطا در چک وضعیت بات:</b> {str(e)[:80]}")
+
+            try:
+                count = bot.get_chat_member_count(CHANNEL_ID)
+                lines.append(f"👥 <b>تعداد اعضا:</b> {count:,}")
+            except Exception:
+                pass
+
+        except Exception as e:
+            lines.append(f"❌ <b>کانال پیدا نشد:</b> {str(e)[:80]}")
+    else:
+        lines.append("⚠️ <b>CHANNEL_ID ست نشده</b>")
+
+    lines.append("━━━━━━━━━━━━━━━")
+
+    # ۴) آیدی خودت
+    try:
+        my_id = call.from_user.id
+        lines.append(f"🆔 <b>Your ID:</b> <code>{my_id}</code>")
+    except Exception:
+        pass
+
+    # ۵) وبهوک
+    try:
+        domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
+        if domain:
+            lines.append(f"🌐 <b>Webhook:</b> ✅ فعال")
+        else:
+            lines.append("⚠️ <b>Webhook:</b> ست نشده")
+    except Exception:
+        pass
+
+    # ۶) دیتابیس
+    try:
+        import psycopg2
+        from config import DATABASE_URL
+        sync_url = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        conn = psycopg2.connect(sync_url)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users")
+        users_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM operations")
+        ops_count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+
+        lines.append("━━━━━━━━━━━━━━━")
+        lines.append(f"🗄 <b>دیتابیس:</b> ✅ متصل")
+        lines.append(f"👥 <b>کاربران:</b> {users_count:,}")
+        lines.append(f"⚙️ <b>عملیات:</b> {ops_count:,}")
+    except Exception as e:
+        lines.append("━━━━━━━━━━━━━━━")
+        lines.append(f"❌ <b>دیتابیس:</b> خطا")
+        lines.append(f"<i>{str(e)[:80]}</i>")
+
+    text = "\n".join(lines)
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔄 بروزرسانی", callback_data="adm_channel_info"))
+    markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adm_back"))
+
+    try:
+        bot.edit_message_text(
+            text,
+            call.message.chat.id, call.message.message_id,
+            parse_mode='HTML', reply_markup=markup
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id, text,
+            parse_mode='HTML', reply_markup=markup
+        )
 
 
 def _export_csv(call, kind: str):
@@ -285,7 +381,6 @@ def _export_csv(call, kind: str):
         logger.exception("خطا در CSV")
         bot.send_message(call.message.chat.id, f"❌ خطا: {e}")
 
-    # 👇 user_id رو پاس بده
     admin_panel(call.message, edit=True, user_id=call.from_user.id)
 
 
@@ -304,8 +399,7 @@ def admin_find_user(message):
     if not info:
         bot.send_message(
             message.chat.id,
-            f"❌ کاربری با «{query}» پیدا نشد.\n\n"
-            "💡 می‌تونی آیدی عددی یا یوزرنیم بدی."
+            f"❌ کاربری با «{query}» پیدا نشد."
         )
         clear_state(user_id)
         admin_panel(message)
@@ -348,8 +442,7 @@ def admin_broadcast(message):
 
     status_msg = bot.send_message(
         message.chat.id,
-        f"📢 در حال ارسال به {total} کاربر...\n\n"
-        f"✅ موفق: 0\n❌ ناموفق: 0"
+        f"📢 در حال ارسال به {total} کاربر...\n\n✅ موفق: 0\n❌ ناموفق: 0"
     )
 
     success = 0
@@ -369,10 +462,8 @@ def admin_broadcast(message):
         if i % 20 == 0 or i == total:
             try:
                 bot.edit_message_text(
-                    f"📢 در حال ارسال...\n\n"
-                    f"📊 پیشرفت: {i}/{total}\n"
-                    f"✅ موفق: {success}\n"
-                    f"❌ ناموفق: {failed}",
+                    f"📢 در حال ارسال...\n\n📊 پیشرفت: {i}/{total}\n"
+                    f"✅ موفق: {success}\n❌ ناموفق: {failed}",
                     message.chat.id, status_msg.message_id
                 )
             except Exception:
@@ -382,9 +473,7 @@ def admin_broadcast(message):
 
     bot.edit_message_text(
         f"✅ <b>ارسال تموم شد!</b>\n\n"
-        f"📊 کل: {total}\n"
-        f"✅ موفق: {success}\n"
-        f"❌ ناموفق: {failed}",
+        f"📊 کل: {total}\n✅ موفق: {success}\n❌ ناموفق: {failed}",
         message.chat.id, status_msg.message_id,
         parse_mode='HTML'
     )
@@ -405,10 +494,7 @@ def admin_ban(message):
     info = _find_user_by_query(query)
 
     if not info:
-        bot.send_message(
-            message.chat.id,
-            f"❌ کاربری با «{query}» پیدا نشد."
-        )
+        bot.send_message(message.chat.id, f"❌ کاربری با «{query}» پیدا نشد.")
         clear_state(user_id)
         admin_panel(message)
         return
@@ -473,7 +559,6 @@ def admin_do_ban(call):
 
 # ---------- تابع کمکی ----------
 def _find_user_by_query(query: str) -> dict | None:
-    """اگه query عدد بود، با ID. اگه @ داشت یا حروف بود، با یوزرنیم."""
     query = query.strip()
 
     if query.startswith("@"):
