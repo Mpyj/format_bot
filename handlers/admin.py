@@ -54,6 +54,9 @@ def admin_panel(message, edit: bool = False, user_id: int = None):
     markup.add(
         types.InlineKeyboardButton("🔍 اطلاعات کانال", callback_data="adm_channel_info"),
     )
+    markup.add(
+        types.InlineKeyboardButton("🔄 همگام‌سازی کاربران", callback_data="adm_sync_users"),
+    )
     markup.add(types.InlineKeyboardButton("❌ بستن", callback_data="adm_close"))
 
     if edit:
@@ -99,6 +102,8 @@ def admin_callback(call):
         _show_ops(call)
     elif action == "channel_info":
         _show_channel_info(call)
+    elif action == "sync_users":
+        _sync_users(call)
     elif action == "find_user":
         bot.answer_callback_query(call.id)
         set_state(call.from_user.id, waiting_for="admin_find_user")
@@ -321,13 +326,24 @@ def _show_channel_info(call):
         users_count = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM operations")
         ops_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(DISTINCT user_id) FROM operations")
+        distinct_ops_users = cur.fetchone()[0]
         cur.close()
         conn.close()
 
         lines.append("━━━━━━━━━━━━━━━")
         lines.append(f"🗄 <b>دیتابیس:</b> ✅ متصل")
-        lines.append(f"👥 <b>کاربران:</b> {users_count:,}")
+        lines.append(f"👥 <b>کاربران (users):</b> {users_count:,}")
+        lines.append(f"🎯 <b>کاربران (operations):</b> {distinct_ops_users:,}")
         lines.append(f"⚙️ <b>عملیات:</b> {ops_count:,}")
+
+        if distinct_ops_users > users_count:
+            lines.append(
+                f"\n⚠️ <b>{distinct_ops_users - users_count}</b> کاربر توی operations هست "
+                f"ولی توی users نیست!"
+            )
+            lines.append("💡 دکمه «🔄 همگام‌سازی کاربران» رو بزن.")
+
     except Exception as e:
         lines.append("━━━━━━━━━━━━━━━")
         lines.append(f"❌ <b>دیتابیس:</b> خطا")
@@ -350,6 +366,112 @@ def _show_channel_info(call):
             call.message.chat.id, text,
             parse_mode='HTML', reply_markup=markup
         )
+
+
+# ============================================================
+# 🔄 همگام‌سازی کاربران
+# ============================================================
+def _sync_users(call):
+    """
+    کاربرایی که توی operations هستن ولی توی users نیستن رو اضافه می‌کنه.
+    """
+    bot.answer_callback_query(call.id, "در حال همگام‌سازی...")
+
+    try:
+        import psycopg2
+        from config import DATABASE_URL
+
+        sync_url = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        conn = psycopg2.connect(sync_url)
+        cur = conn.cursor()
+
+        # پیدا کردن کاربرایی که توی operations هستن ولی توی users نیستن
+        cur.execute("""
+            SELECT DISTINCT o.user_id
+            FROM operations o
+            LEFT JOIN users u ON o.user_id = u.id
+            WHERE u.id IS NULL
+        """)
+        missing_users = [row[0] for row in cur.fetchall()]
+
+        # اضافه کردن به users
+        added = 0
+        for uid in missing_users:
+            try:
+                # تلاش برای گرفتن اسم واقعی از تلگرام
+                first_name = "User"
+                username = "user"
+                try:
+                    chat_info = bot.get_chat(uid)
+                    first_name = chat_info.first_name or "User"
+                    username = chat_info.username or "user"
+                except Exception:
+                    pass
+
+                cur.execute(
+                    """
+                    INSERT INTO users (id, first_name, username)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (uid, first_name, username)
+                )
+                if cur.rowcount > 0:
+                    added += 1
+            except Exception as e:
+                logger.warning(f"خطا در اضافه کردن {uid}: {e}")
+
+        conn.commit()
+
+        # آمار جدید
+        cur.execute("SELECT COUNT(*) FROM users")
+        total_users = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM operations")
+        total_ops = cur.fetchone()[0]
+
+        cur.close()
+        conn.close()
+
+        text = (
+            "🔄 <b>همگام‌سازی کاربران</b>\n"
+            "━━━━━━━━━━━━━━━\n\n"
+            f"🔍 <b>کاربرای گمشده:</b> {len(missing_users)}\n"
+            f"✅ <b>اضافه شده:</b> {added}\n\n"
+            "━━━━━━━━━━━━━━━\n\n"
+            f"👥 <b>کل کاربران:</b> {total_users:,}\n"
+            f"⚙️ <b>کل عملیات:</b> {total_ops:,}\n\n"
+            "💡 حالا تعداد کاربران درست شده."
+        )
+
+        if missing_users and len(missing_users) <= 10:
+            text += "\n\n📋 <b>User IDهای اضافه شده:</b>\n"
+            for uid in missing_users[:10]:
+                text += f"• <code>{uid}</code>\n"
+
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔙 بازگشت", callback_data="adm_back"))
+
+        try:
+            bot.edit_message_text(
+                text,
+                call.message.chat.id, call.message.message_id,
+                parse_mode='HTML', reply_markup=markup
+            )
+        except Exception:
+            bot.send_message(
+                call.message.chat.id, text,
+                parse_mode='HTML', reply_markup=markup
+            )
+
+    except Exception as e:
+        logger.exception("خطا در همگام‌سازی")
+        try:
+            bot.edit_message_text(
+                f"❌ خطا: {e}",
+                call.message.chat.id, call.message.message_id
+            )
+        except Exception:
+            bot.send_message(call.message.chat.id, f"❌ خطا: {e}")
 
 
 def _export_csv(call, kind: str):
