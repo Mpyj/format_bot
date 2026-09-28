@@ -2,17 +2,43 @@ import logging
 from telebot import types
 from telebot.apihelper import ApiTelegramException
 from main import bot
-from config import CHANNEL_ID, CHANNEL_LINK
+from config import CHANNEL_ID, CHANNEL_LINK, DATABASE_URL
 from utils.admin_tools import (
     is_user_banned, register_user, update_last_active
 )
 
 logger = logging.getLogger(__name__)
 
-# 📊 دیتابیس ساده در حافظه برای محدودیت استفاده
+# 📊 cache ساده در حافظه (برای سرعت)
 _user_usage = {}
 
 
+# ============================================================
+# 🗄 چک از دیتابیس (پایدار)
+# ============================================================
+def _has_used_before(user_id: int) -> bool:
+    """چک کن کاربر قبلاً از قابلیت‌ها استفاده کرده یا نه (از دیتابیس)"""
+    try:
+        import psycopg2
+        sync_url = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+        conn = psycopg2.connect(sync_url)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM operations WHERE user_id = %s",
+            (user_id,)
+        )
+        count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return count > 0
+    except Exception as e:
+        logger.warning(f"خطا در چک از دیتابیس: {e}")
+        return False
+
+
+# ============================================================
+# 📢 چک عضویت
+# ============================================================
 def is_subscribed(chat_id: int, user_id: int) -> bool:
     """چک می‌کنه کاربر عضو کانال هست یا نه"""
     try:
@@ -61,9 +87,9 @@ def mark_user_used(user_id: int):
 def check_usage_limit(func):
     """
     دکوراتور محدودیت استفاده.
-    - چک بن
     - ثبت کاربر
-    - چک عضویت کانال
+    - چک بن
+    - چک عضویت کانال (از دیتابیس)
     """
     def wrapper(message, *args, **kwargs):
         user_id = message.from_user.id
@@ -102,7 +128,10 @@ def check_usage_limit(func):
 
         # ۴) چک عضویت کانال
         try:
-            if _user_usage.get(user_id, False) and not is_subscribed(CHANNEL_ID, user_id):
+            # 👇 از دیتابیس چک کن (پایدارتر از حافظه)
+            has_used = _has_used_before(user_id) or _user_usage.get(user_id, False)
+
+            if has_used and not is_subscribed(CHANNEL_ID, user_id):
                 send_join_message(message.chat.id)
                 return
 

@@ -3,11 +3,24 @@ from main import bot
 from config import ADMIN_ID
 from utils.states import clear_state, get_state, set_state
 from utils.keyboards import main_menu_keyboard
+from utils.admin_tools import register_user
 
 
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     user_id = message.from_user.id
+
+    # 👇 ثبت کاربر
+    try:
+        register_user(
+            user_id,
+            message.from_user.first_name or "",
+            message.from_user.username or ""
+        )
+    except Exception as e:
+        import logging
+        logging.warning(f"خطا در ثبت کاربر: {e}")
+
     clear_state(user_id)
     set_state(user_id, menu_page=1)
 
@@ -25,6 +38,26 @@ def start_handler(message):
         message.chat.id,
         text,
         reply_markup=main_menu_keyboard(user_id, page=1),
+        parse_mode='HTML'
+    )
+
+
+# ============================================================
+# 🔍 چک کانال (برای دیباگ)
+# ============================================================
+@bot.message_handler(commands=['check'])
+def check_channel(message):
+    from config import CHANNEL_ID
+    from handlers.middleware import is_subscribed
+
+    user_id = message.from_user.id
+    subscribed = is_subscribed(CHANNEL_ID, user_id)
+
+    bot.send_message(
+        message.chat.id,
+        f"🆔 <b>Your ID:</b> <code>{user_id}</code>\n"
+        f"📢 <b>Channel ID:</b> <code>{CHANNEL_ID}</code>\n"
+        f"👤 <b>Subscribed:</b> {'✅ بله' if subscribed else '❌ خیر'}",
         parse_mode='HTML'
     )
 
